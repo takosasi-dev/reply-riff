@@ -113,6 +113,14 @@ func test_fr3_key_sounds_same_frame() -> bool:
 	ok(int(m.play.key_lat_us[0]) < 16700, "1 フレーム以内(%d usec)" % int(m.play.key_lat_us[0]))
 	frames(m, 1)
 	eq(m.play.sim.presses[0], [], "数えの間の押すは判定に使わない(E-2)")
+	for k in 99:  # §8.2: 100 回の中央値と 95% 値(Godot の中だけ)
+		m._input(kev(KEY_A if k % 2 == 0 else KEY_S))
+		m._input(kev(KEY_A if k % 2 == 0 else KEY_S, false))
+	var lat: Array = m.play.key_lat_us.duplicate()
+	lat.sort()
+	eq(lat.size(), 100, "100 回")
+	ok(int(lat[-1]) < 16700, "最大も 1 フレーム以内(NFR-2)")
+	print("  押してから鳴らす呼び出しまで(100 回): 中央値 %d usec / 95%% 値 %d usec / 最大 %d usec" % [lat[50], lat[94], lat[-1]])
 	_done(m)
 	return true
 
@@ -225,6 +233,23 @@ func test_ac20_no_shake_when_off() -> bool:
 		frames(m, 1, 0.0)
 		moved = moved or m.play.position != Vector2.ZERO
 	ok(moved, "入なら揺れる")
+	_done(m)
+	return true
+
+
+func test_fr25_enter_before_last_judge() -> bool:
+	# 回 8 の最後の音が位置 7 なら判定は 4900(E-6)。自分の曲の頭 4896〜4899 の Enter では飛ばさない
+	var m := _main()
+	_to_play(m)
+	m.play.sim.phrase[7] = {"pos": [1, 2, 3, 4, 5, 7], "keys": [0, 0, 0, 0, 0, 0], "hint": 0}
+	var bot := Bots.new(Bots.EXACT)
+	while m.play.sim.tick < B.SONG_START + 2:
+		bot.act(m.play.sim)
+		m.play.sim.step()
+	frames(m, 1, 0.0)
+	eq(m.play.sim.judged, 7, "回 8 はまだ判定していない")
+	press(m, KEY_ENTER)
+	eq(m.screen, "play", "回 8 の判定の前は飛ばさない")
 	_done(m)
 	return true
 

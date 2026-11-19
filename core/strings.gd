@@ -51,6 +51,7 @@ const RES_NEW_BEST := "最高 +%s(新しい記録)"
 const RES_TO_BEST := "最高まで −%s"
 const RES_TODAY_BEST := "(今日の最高 %s点)"
 const RES_TURNS := "合った回 %d/8"
+const RES_LIVES := "残機 %d"
 const GRADE_NAMES := ["ぴったり", "よい", "おしい", "外れ"]
 const RES_GRADE := "%s %d"
 const B_RETRY := "もう1回"

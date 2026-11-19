@@ -1,4 +1,4 @@
-# S3 結果(画面設計書 §4)。見出し・点(600 ms で数え上がる)・最高との差・5 つの数・共有する文字を出す。
+# S3 結果(画面設計書 §4)。見出し・点(600 ms で数え上がる)・最高との差・5 つの数と残機(FR-16)・共有する文字を出す。
 # もう1回は 300 ms 後から押せる(Enter・R でも)。コピーは clipboard_set を試し、選べる枠も出す(E-14)。作りは KeyFlak の ui/result.gd。
 extends Control
 
@@ -38,10 +38,11 @@ func build(mode: int, result: Dictionary, rec: Dictionary, share_text: String) -
 		add_child(Kit.place(Kit.label(text, 24, Kit.C_PERFECT if rec["new_best"] else Kit.C_DIM, 700), 0, 190, 1280, 36))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 48)
+	row.add_theme_constant_override("separation", 40)
 	row.add_child(Kit.label(S.RES_TURNS % int(result["turns_ok"]), 26, Kit.C_TEXT, 500))
 	for g in 4:
 		row.add_child(Kit.label(S.RES_GRADE % [S.GRADE_NAMES[g], int(result["counts"][g])], 26, Kit.C_TEXT, 500))
+	row.add_child(Kit.label(S.RES_LIVES % int(result["lives"]), 26, Kit.C_DIM, 500))  # FR-16(画面設計書 §4 の 5 つの数には無い)
 	add_child(Kit.place(row, 0, 240, 1280, 44))
 	_retry = Kit.place(Kit.button("retry", S.B_RETRY, 30), 490, 306, 300, 68)
 	_retry.disabled = true

@@ -26,6 +26,7 @@ var held := {}  # 押されている鍵の番号 → 押した時刻(ms)
 var key_lat_us: Array = []  # 押すイベントを受けてから音を鳴らす呼び出しまで(usec。NFR-2)
 
 var _free := 0.0  # 目標の tick(小数)
+var _layers := 0  # sim の層(turn_ok の events から。音の側へは小節の頭で移す)
 var _behind_since := -1
 var _over_at := -1
 var _over_text := ""
@@ -85,6 +86,7 @@ func start(p_mode: int, p_seed: int) -> void:
 	_free = 0.0
 	_over_at = -1
 	_song_lit.clear()
+	_layers = 0
 	Music.set_layers(0)
 	if not frame_clock:
 		Music.start_at(0)
@@ -104,7 +106,7 @@ func key(ev: InputEventKey) -> void:
 		return
 	var i := Keymap.index_of(ev)
 	if i < 0:
-		if ev.pressed and not ev.echo and ev.physical_keycode in [KEY_ENTER, KEY_KP_ENTER] and int(_snap.get("section", -1)) == TL.SONG:
+		if ev.pressed and not ev.echo and ev.physical_keycode in [KEY_ENTER, KEY_KP_ENTER] and int(_snap.get("section", -1)) == TL.SONG and int(_snap["judged"]) >= B.TURNS:
 			skip_song()  # FR-25
 		elif ev.pressed and ev.physical_keycode == 0:
 			_ime_until = Time.get_ticks_msec() + B.IME_NOTE_MS  # 共通 §3 の 9
@@ -142,7 +144,7 @@ func resume() -> void:
 	sim.rewind_to_turn()
 	_free = sim.tick
 	_behind_since = -1
-	Music.set_layers(sim.layers)
+	Music.set_layers(_layers)
 	if not frame_clock:
 		Music.start_at(sim.tick)
 	paused = false
@@ -165,10 +167,12 @@ func _process(delta: float) -> void:
 		return
 	if paused or _over_at == -2:
 		return
+	# 曲の位置は毎フレーム読む(くり返しの回数と「止まっていないか」はここで更新される)
+	var music_tick := 0.0 if frame_clock else Music.song_sec() * B.TICK_HZ
 	if frame_clock or Music.stalled():
 		_free += delta * B.TICK_HZ
 	else:
-		_free = Music.song_sec() * B.TICK_HZ
+		_free = music_tick
 	var n := floori(_free) - sim.tick  # 目標が前なら進めない(E-7)
 	if n > B.MAX_STEPS_PER_FRAME:
 		n = B.MAX_STEPS_PER_FRAME  # E-8: 残りは次のフレームで追う
@@ -199,7 +203,7 @@ func _on_event(e: Dictionary) -> void:
 			_beat_at = now
 			_beat_n = e["beat"]
 			if e["beat"] == 0:
-				Music.set_layers(sim.layers)  # 層は判定の後、次の小節の頭から(§9.4)
+				Music.set_layers(_layers)  # 層は判定の後、次の小節の頭から(§9.4)
 			if Music.layers == 0:
 				Notes.play("click")
 		"call_note":
@@ -207,7 +211,8 @@ func _on_event(e: Dictionary) -> void:
 		"turn_ok":
 			_turn_text = S.TURN_OK
 			_turn_at = now
-			_tag_layer = int(e["layers"]) - 1
+			_layers = int(e["layers"])
+			_tag_layer = _layers - 1
 			_tag_at = now
 		"turn_miss":
 			_turn_text = S.TURN_MISS
