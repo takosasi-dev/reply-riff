@@ -92,9 +92,11 @@ func _judge(t: int) -> void:
 	var ok := not g.has(J.MISS)
 	turn_grades.append(g)
 	turn_ok.append(ok)
-	points += Score.turn_points(g, turn["pos"].size())
+	var gained := Score.turn_points(g, turn["pos"].size())
+	points += gained
 	judged = t + 1
-	_events.append({"type": "judge", "turn": t, "grades": g})
+	_events.append({"type": "judge", "turn": t, "grades": g, "pos": turn["pos"].duplicate(), "keys": turn["keys"].duplicate(),
+		"presses": presses[t].duplicate(true), "points": gained})  # pos 以降は画面の手がかり(お手本と押した位置を比べる)
 	# 自分の曲のこの回の小節: 合えば押した音と位置で、外れならお手本を薄い音で
 	var bar := B.SONG_START + B.BAR_TICKS * t
 	if ok:

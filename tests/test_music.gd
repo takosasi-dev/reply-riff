@@ -70,3 +70,22 @@ func test_stall_guard_recovers() -> bool:
 
 
 const Play := preload("res://ui/play.gd")
+
+
+# R-4 の作りの守り(磨き 2026-11-20): 4 層は同じ速さ・同じくり返しの位置で、1 つの AudioStreamSynchronized に入っている。
+# 1 つのプレイヤーが同じミックスで足すので、長さとくり返しがそろっていれば層どうしはずれない(録音では未確認)。
+func test_layers_share_loop() -> bool:
+	var sync := Music.player.stream as AudioStreamSynchronized
+	ok(sync != null, "伴奏は AudioStreamSynchronized")
+	eq(sync.stream_count, B.MAX_LAYERS, "4 層")
+	var ends := []
+	var rates := []
+	for k in B.MAX_LAYERS:
+		var s := sync.get_sync_stream(k) as AudioStreamWAV
+		ok(s != null and s.loop_mode == AudioStreamWAV.LOOP_FORWARD, "層 %d はくり返す" % (k + 1))
+		ends.append(s.loop_end)
+		rates.append(s.mix_rate)
+	eq(ends, [ends[0], ends[0], ends[0], ends[0]], "くり返しの終わりが同じ(%d)" % ends[0])
+	eq(rates, [rates[0], rates[0], rates[0], rates[0]], "速さが同じ")
+	eq(ends[0], int(round(B.LOOP_SEC * rates[0])), "くり返しは 9.6 秒")
+	return true

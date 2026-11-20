@@ -19,7 +19,8 @@ var held := {}  # 試し弾きで押されている鍵
 
 
 # store は save_store、day は通し日数、date は "2026-11-19"。
-func build(store: RefCounted, day: int, date: String) -> void:
+# sel は選んでおくボタン(0 今日の曲・1 練習・2 設定。設定やプレイから戻った時に、前に選んだ物のまま)。
+func build(store: RefCounted, day: int, date: String, sel: int = 0) -> void:
 	size = Vector2(1280, 720)
 	add_child(Kit.place(Kit.label(S.NAME, 72, Kit.C_TEXT, 800), 0, 30, 1280, 100))
 	add_child(Kit.place(Kit.label(S.TAGLINE, 28, Kit.C_DIM, 500), 0, 128, 1280, 44))
@@ -46,7 +47,7 @@ func build(store: RefCounted, day: int, date: String) -> void:
 	var ver := Kit.label(S.VERSION, 20, Kit.C_DIM)
 	ver.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(Kit.place(ver, 1056, 676, 200, 32))
-	menu = Menu.new([daily, practice, settings] as Array[Button], 0)
+	menu = Menu.new([daily, practice, settings] as Array[Button], sel)
 
 
 func _note(text: String, by: Button) -> void:

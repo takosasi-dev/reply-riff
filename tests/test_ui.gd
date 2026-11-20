@@ -341,3 +341,71 @@ func test_title_keys_play() -> bool:
 	eq(m.screen, "title", "メニューは動かない")
 	_done(m)
 	return true
+
+
+# 磨き(2026-11-20): タイトルは前に選んだボタンを覚えている(設定から戻ると設定のまま)。
+func test_title_remembers_selection() -> bool:
+	var m := _main()
+	press(m, KEY_X)
+	press(m, KEY_DOWN)
+	press(m, KEY_DOWN)
+	press(m, KEY_ENTER)
+	eq(m.screen, "settings", "↓↓ Enter で設定")
+	press(m, KEY_ESCAPE)
+	eq(m.screen, "title", "Esc でタイトル")
+	eq(m.current.menu.sel, 2, "設定のボタンが選ばれたまま")
+	press(m, KEY_DOWN)
+	press(m, KEY_DOWN)
+	press(m, KEY_ENTER)
+	eq(int(m.run["mode"]), 1, "↓↓ で練習")
+	m.play.frame_clock = true
+	_finish(m)
+	m.current._shown_at -= 1000
+	frames(m, 1)
+	press(m, KEY_DOWN)
+	press(m, KEY_DOWN)
+	press(m, KEY_ENTER)  # 結果のタイトルへ
+	eq(m.screen, "title", "結果からタイトルへ")
+	eq(m.current.menu.sel, 1, "練習のボタンが選ばれたまま")
+	_done(m)
+	return true
+
+
+# 磨き(2026-11-20): 回の結果の印は turn_ok・turn_miss で伸び、もう1回で消える。判定の後は、比べる印のために judge を持つ。
+func test_turn_results_and_judge_kept() -> bool:
+	var m := _main()
+	_to_play(m)
+	var p: Play = m.play
+	p._on_event({"type": "judge", "turn": 0, "grades": [0, 0, 0, 0], "pos": [0, 2, 4, 5], "keys": [3, 3, 3, 3], "presses": [], "points": 1700})
+	p._on_event({"type": "turn_ok", "turn": 0, "layers": 1})
+	p._on_event({"type": "turn_miss", "turn": 1, "lives": 2})
+	eq(p._results, [true, false], "合った・外れの順に並ぶ")
+	eq(int(p._judge["turn"]), 0, "最後の判定を持つ")
+	eq(p._gain_text, "+1,700", "入った点の文字")
+	ok(p._life_lost_at > 0, "残機を失った時刻")
+	m._again()
+	eq(m.play._results, [], "もう1回で消える")
+	ok(m.play._judge.is_empty(), "判定も消える")
+	_done(m)
+	return true
+
+
+# 磨き(2026-11-20): 一時停止から戻った直後の 1 小節(判定済みの回の返し)は、数えとして見せる。点滅を弱めると新しい光も 20% 以下。
+func test_resume_lead_in_and_reduced_flash() -> bool:
+	var m := _main()
+	_to_play(m)
+	frames(m, 60 * 7)  # 回 1 の判定を過ぎ、回 2 のお手本の途中まで
+	press(m, KEY_ESCAPE)
+	press(m, KEY_ESCAPE)
+	var p: Play = m.play
+	eq(TL.section(p.sim.tick), TL.REPLY, "戻った先は回 1 の返しの小節")
+	eq(p._view_section(), TL.COUNT, "画面では数えとして見せる")
+	eq(p._head.text, "", "見出し「弾き返す」を出さない")
+	eq(p._bar["turn"].text, "回 2/8", "上の帯は次に返す回")
+	frames(m, 60 * 3)
+	eq(TL.section(p.sim.tick), TL.CALL, "次の小節はお手本")
+	eq(p._view_section(), TL.CALL, "お手本に入ったら元に戻る")
+	p.reduce_flash = true
+	ok(p._flash(1.0) <= B.REDUCED_FLASH_ALPHA and p._flash(0.1) <= 0.1, "点滅を弱めると光は 20% 以下")
+	_done(m)
+	return true

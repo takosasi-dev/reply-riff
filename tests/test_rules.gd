@@ -351,3 +351,18 @@ func test_nfr5_fixed_values() -> bool:
 
 
 const FIXED_JITTER := [8400, 4, [13, 8, 9, 3]]  # Windows で出した値。CI(Linux)でも同じになること
+
+
+# 磨き(2026-11-20): 判定の events に、画面がお手本と押した位置を比べるための pos・keys・presses・points が入る。
+func test_judge_event_carries_compare_data() -> bool:
+	var sim := Sim.new(1, Sim.MODE_DAILY)
+	run_to(sim, TL.reply_start(0) - 30)
+	var ticks := model_ticks(sim, 0)
+	ticks[1] += 10  # 2 音目を「よい」に
+	var j: Dictionary = of_type(reply(sim, 0, ticks, [3, 3, 3, 3]), "judge")[0]
+	eq(j["pos"], [0, 2, 4, 5], "お手本の位置")
+	eq(j["keys"], [3, 3, 3, 3], "お手本のキー")
+	eq(j["presses"].size(), 4, "押した記録")
+	eq(int(j["presses"][1][0]), ticks[1], "押した tick")
+	eq(int(j["points"]), sim.points, "入った点(1 回目なので合計と同じ)")
+	return true

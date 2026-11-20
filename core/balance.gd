@@ -83,6 +83,12 @@ const COUNT_MS := 600
 const RETRY_LOCK_MS := 300
 const IME_NOTE_MS := 3000
 const REDUCED_FLASH_ALPHA := 0.2
+# 磨きで足した手がかり(2026-11-20)
+const TAG_POP_MS := 400  # 増えた層の札が、鳴り始めた小節の頭で膨らむ
+const TAG_POP_PX := 6.0
+const LIFE_LOST_MS := 500  # 残機を失った丸から赤い輪が広がる
+const GAIN_MS := 900  # 判定で入った点が浮かんで消える
+const OLD_MARK_ALPHA := 0.5  # 次のお手本の間に残す、前の回の段の印の濃さ
 
 # 画面の配置(画面設計書 §3)
 const RULER_X0 := 240.0
@@ -93,3 +99,8 @@ const KEY_H := 140.0
 const KEY_GAP := 16.0
 const HAND_GAP := 96.0
 const KEY_Y := 480.0
+const ROW_DY := 40.0  # 目盛りの下の 1 段目(お手本の ◆・押した位置の丸)
+const ROW_GRADE_DY := 92.0  # 2 段目(段の印。その下にお手本のキー)
+const DOT_R := 13.0  # 押した位置の丸
+const PIPS_Y := 668.0  # 回の進み(8 つの印)
+const PIP_GAP := 36.0

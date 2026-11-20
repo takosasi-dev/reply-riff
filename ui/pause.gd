@@ -14,8 +14,8 @@ var menu: Menu
 func build() -> void:
 	size = Vector2(1280, 720)
 	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.7)
-	add_child(Kit.place(dim, 0, 0, 1280, 720))
+	dim.color = Color(Kit.C_BG, 0.9)  # 後ろの見出しと重ならない濃さ
+	add_child(Kit.place(dim, -2000, -2000, 5280, 4720))  # 余りまで覆う(aspect=expand)
 	add_child(Kit.place(Kit.label(S.PAUSE, 40, Kit.C_TEXT, 700), 0, 110, 1280, 60))
 	var list: Array[Button] = []
 	var y := 210.0

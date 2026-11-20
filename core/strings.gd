@@ -3,7 +3,7 @@
 extends RefCounted
 
 const NAME := "ReplyRiff"
-const VERSION := "v0.1.0"
+const VERSION := "v0.2.0"
 const URL := "https://takosasi-dev.github.io/reply-riff/"
 
 # 鍵盤(§9.1。左から 0〜7)
@@ -42,6 +42,7 @@ const LAYER_NAMES := ["ドラム", "ベース", "和音", "パッド"]
 const SKIP := "Enter で飛ばす"
 const OVER_DONE := "曲ができた"
 const OVER_STOP := "曲が止まった"
+const GAIN := "+%s"  # 判定で入った点(磨きで足した)
 
 # S3
 const RES_DONE := "曲ができた(外れ %d 回)"

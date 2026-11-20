@@ -130,24 +130,29 @@ static func draw_key(ci: CanvasItem, k: int, r: Rect2, sink: float, fill: float,
 
 
 # 判定の印: ぴったり ●、よい ◐、おしい ○、外れ ×(形で分ける。NFR-11)。
-static func draw_grade(ci: CanvasItem, at: Vector2, grade: int, r: float = 11.0) -> void:
+static func draw_grade(ci: CanvasItem, at: Vector2, grade: int, r: float = 11.0, alpha: float = 1.0) -> void:
 	match grade:
 		0:
-			ci.draw_circle(at, r, C_PERFECT)
+			ci.draw_circle(at, r, Color(C_PERFECT, alpha))
 		1:
-			ci.draw_arc(at, r, 0, TAU, 32, C_GOOD, 3.0, true)
+			ci.draw_arc(at, r, 0, TAU, 32, Color(C_GOOD, alpha), 3.0, true)
 			var half := PackedVector2Array()
 			for k in 17:
 				var a := PI / 2 + PI * k / 16.0  # 下 → 左 → 上(左の半分を塗る)
 				half.append(at + Vector2(cos(a), sin(a)) * r)
-			ci.draw_colored_polygon(half, C_GOOD)
+			ci.draw_colored_polygon(half, Color(C_GOOD, alpha))
 		2:
-			ci.draw_arc(at, r, 0, TAU, 32, C_OK, 3.0, true)
+			ci.draw_arc(at, r, 0, TAU, 32, Color(C_OK, alpha), 3.0, true)
 		_:
-			ci.draw_line(at + Vector2(-r, -r), at + Vector2(r, r), C_MISS, 4.0, true)
-			ci.draw_line(at + Vector2(-r, r), at + Vector2(r, -r), C_MISS, 4.0, true)
+			ci.draw_line(at + Vector2(-r, -r), at + Vector2(r, r), Color(C_MISS, alpha), 4.0, true)
+			ci.draw_line(at + Vector2(-r, r), at + Vector2(r, -r), Color(C_MISS, alpha), 4.0, true)
 
 
-# お手本の位置の印 ◆。
-static func draw_diamond(ci: CanvasItem, at: Vector2, r: float, c: Color) -> void:
-	ci.draw_colored_polygon(PackedVector2Array([at + Vector2(0, -r), at + Vector2(r, 0), at + Vector2(0, r), at + Vector2(-r, 0)]), c)
+# お手本の位置の印 ◆(filled が偽なら ◇。判定の後に、押した位置と比べる時)。
+static func draw_diamond(ci: CanvasItem, at: Vector2, r: float, c: Color, filled: bool = true) -> void:
+	var pts := PackedVector2Array([at + Vector2(0, -r), at + Vector2(r, 0), at + Vector2(0, r), at + Vector2(-r, 0)])
+	if filled:
+		ci.draw_colored_polygon(pts, c)
+	else:
+		pts.append(pts[0])
+		ci.draw_polyline(pts, c, 2.0, true)

@@ -53,6 +53,7 @@ def main() -> int:
         return godot(["--script", "res://tests/run_tests.gd", "--", *rest], timeout=900)
     if cmd == "export":
         (ROOT / "build" / "web").mkdir(parents=True, exist_ok=True)
+        (ROOT / "build" / ".gdignore").touch()  # 書き出した物を Godot に取り込ませない
         return godot(["--export-release", "Web", "build/web/index.html"])
     if cmd == "smoke":  # 本体を窓なしで frames フレーム動かす。例: smoke 300000 --auto
         frames = rest[0] if rest else "600"

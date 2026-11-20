@@ -35,7 +35,7 @@ func build(mode: int, result: Dictionary, rec: Dictionary, share_text: String) -
 		var text: String = S.RES_NEW_BEST % Score.comma(_points - best) if rec["new_best"] else S.RES_TO_BEST % Score.comma(best - _points)
 		if mode == 0:
 			text += S.RES_TODAY_BEST % Score.comma(maxi(best, _points))
-		add_child(Kit.place(Kit.label(text, 24, Kit.C_PERFECT if rec["new_best"] else Kit.C_DIM, 700), 0, 190, 1280, 36))
+		add_child(Kit.place(Kit.label(text, 24, Kit.C_PERFECT if rec["new_best"] else Kit.C_DIM, 700), 0, 194, 1280, 36))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 40)

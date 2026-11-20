@@ -10,6 +10,8 @@ var layers := 0  # 鳴らしている層の数(テストが読む)
 var loops := 0
 var player: AudioStreamPlayer
 var _sync: AudioStreamSynchronized
+var probe_ctx := false  # ?debug=1 の Web だけ: 曲の位置を読んだ時に、ブラウザの AudioContext の時刻も読む(R-4 の目安)
+var last_pair: Array = []  # [曲の位置(秒), AudioContext の時刻(秒)]
 var _last_raw := 0.0
 var _raw_moved_at := 0  # 生の位置が最後に動いた時刻(ms)
 
@@ -72,7 +74,11 @@ func song_sec() -> float:
 	if raw != _last_raw:
 		_raw_moved_at = Time.get_ticks_msec()
 	_last_raw = raw
-	return loops * B.LOOP_SEC + raw + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+	var sec := loops * B.LOOP_SEC + raw + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency()
+	if probe_ctx:
+		var ctx: Variant = JavaScriptBridge.eval("window.__rrCtx ? window.__rrCtx.currentTime : -1", true)
+		last_pair = [sec, float(ctx) if (ctx is float or ctx is int) else -1.0]
+	return sec
 
 
 # 鳴らしているのに、生の位置が STALL_MS 動いていない(音の出力が止まっている。E-11 の保険)。

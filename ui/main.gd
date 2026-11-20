@@ -33,6 +33,7 @@ var play: Play = null
 var pause_view: Pause = null
 var settings_from := "title"
 var run := {}  # 今の回 { mode, seed, day, date }
+var title_sel := 0  # タイトルで最後に選んだボタン(戻った時にそのまま選んでおく)
 var auto := false
 var music_clock := false
 var _touch_note: Label = null
@@ -43,6 +44,11 @@ var _visibility_cb: Variant = null
 var _auto_results := 0
 var _auto_step := 0
 var _settings_overlay: Control = null
+var debug := false  # ?debug=1: window.rrState に状態を出す(Web の自動の確かめが読むだけ)
+var frame_ms: Array = []
+var clock_log: Array = []  # ?debug=1 の時だけ: [曲の位置(秒), ブラウザの AudioContext の時刻(秒)](R-4 の目安)
+var _last_frame := 0
+var _dbg_n := 0
 
 
 func _ready() -> void:
@@ -50,14 +56,23 @@ func _ready() -> void:
 	stage.size = Vector2(1280, 720)
 	add_child(stage)
 	stage.add_child(Bg.new())
+	get_viewport().size_changed.connect(_layout)
+	_layout()
 	store = Store.new()
 	_apply_settings()
 	auto = _flag("auto") and not OS.has_feature("web")  # 公開版では効かせない(bot の点を保存しない)
 	music_clock = auto and _flag("music")  # --music なら曲の位置で進める(実時間。1 曲 60 秒)
 	if auto and not music_clock:
 		Engine.time_scale = 4.0  # 1 フレーム 8 tick で進める
+	debug = _flag("debug")
+	RenderingServer.frame_post_draw.connect(_after_draw)
 	_watch_visibility()
 	_show_gate()
+
+
+# 縦横比が 16:9 でない窓では、表示の範囲が広がる(project.godot の aspect=expand)。舞台をその真ん中に置く。
+func _layout() -> void:
+	stage.position = ((get_viewport().get_visible_rect().size - stage.size) / 2.0).floor()
 
 
 static func _flag(flag: String) -> bool:
@@ -139,7 +154,7 @@ func _show_title() -> void:
 	screen = "title"
 	var d := _today()
 	var t := Title.new()
-	t.build(store, d["day"], d["date"])
+	t.build(store, d["day"], d["date"], title_sel)
 	t.chosen.connect(_on_title)
 	stage.add_child(t)
 	current = t
@@ -147,6 +162,7 @@ func _show_title() -> void:
 
 func _on_title(what: String) -> void:
 	var d := _today()
+	title_sel = ["daily", "practice", "settings"].find(what)
 	match what:
 		"settings":
 			_show_settings("title")
@@ -175,6 +191,7 @@ func _today() -> Dictionary:
 func _start(r: Dictionary) -> void:
 	_clear()
 	run = r
+	clock_log.clear()
 	screen = "play"
 	play = Play.new()
 	var st: Dictionary = store.settings()
@@ -278,7 +295,7 @@ func _show_settings(from: String) -> void:
 		pause_view.visible = false
 		var dim := ColorRect.new()
 		dim.color = Color(Kit.C_BG, 0.96)
-		s.add_child(Kit.place(dim, 0, 0, 1280, 720))
+		s.add_child(Kit.place(dim, -2000, -2000, 5280, 4720))  # 余りまで覆う(aspect=expand)
 		s.move_child(dim, 0)
 		stage.add_child(s)
 		current = s
@@ -383,3 +400,47 @@ static func _key(pk: int) -> InputEventKey:
 	e.physical_keycode = pk as Key
 	e.keycode = pk as Key
 	return e
+
+
+# --- デバッグ用の窓口(?debug=1 の時だけ。読むだけ。作りは KeySwat) ---
+
+func _after_draw() -> void:
+	var now := Time.get_ticks_usec()
+	if _last_frame > 0 and frame_ms.size() < 20000:
+		frame_ms.append((now - _last_frame) / 1000.0)
+	_last_frame = now
+	if not (debug and OS.has_feature("web")):
+		return
+	Music.probe_ctx = true
+	if Music.last_pair.size() == 2 and (clock_log.is_empty() or clock_log[-1][0] != Music.last_pair[0]) and clock_log.size() < 20000:
+		clock_log.append(Music.last_pair.duplicate())
+	JavaScriptBridge.eval("window.rrState=" + JSON.stringify(JSON.stringify(state())), true)
+	_dbg_n += 1
+	if _dbg_n % 60 == 0:
+		JavaScriptBridge.eval("window.rrClock=" + JSON.stringify(JSON.stringify(clock_log)), true)
+
+
+func state() -> Dictionary:
+	var out := {"screen": screen, "paused": pause_view != null, "buttons": {}, "notes": Notes.played, "last_key": Notes.last_key,
+		"unlocked": Notes.unlocked, "save_failed": store.write_failed, "load_failed": store.load_failed,
+		"music": {"layers": Music.layers, "loops": Music.loops, "playing": Music.is_running(), "latency": AudioServer.get_output_latency()},
+		"frames": frame_ms.size()}
+	if current != null and "menu" in current and current.menu != null:
+		out["sel"] = current.menu.sel
+	var root: Control = _settings_overlay if _settings_overlay != null else (pause_view if pause_view != null and pause_view.visible else current)
+	if root != null:
+		for b in root.find_children("*", "Button", true, false):
+			var btn := b as Button
+			if btn.is_visible_in_tree() and not btn.disabled:
+				var c := btn.global_position - stage.global_position + btn.size / 2  # 舞台の座標(1280×720)
+				out["buttons"][String(btn.name)] = [c.x, c.y]
+	if play != null and play.sim != null:
+		var sn: Dictionary = play.sim.snapshot()
+		sn["pos"] = [play.position.x, play.position.y]
+		sn["held"] = play.held.keys()
+		sn["phrase"] = play.sim.phrase  # 窓なし Chrome の bot が弾き返すため(?debug=1 の時だけ)
+		out["play"] = sn
+	if screen == "result" and current is Result:
+		out["share"] = (current as Result).share
+	return out
+

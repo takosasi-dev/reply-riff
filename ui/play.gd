@@ -42,6 +42,15 @@ var _tag_layer := -1
 var _section := -1
 var _section_at := 0
 var _ime_until := 0
+var _judge := {}  # 最後の判定(events の judge)と、受けた時刻 at
+var _results: Array = []  # 回ごとに合ったか(events の turn_ok・turn_miss)
+var _life_lost_at := -100000
+var _layer_on_at := -100000  # 音の側の層が増えた時刻(小節の頭)
+var _gain_text := ""
+var _gain_at := -100000
+var _song_dots: Array = []  # 自分の曲の今の小節で鳴った音 [8 分音符の位置, キー, 自分の音か]
+var _song_bar := -1
+var _lead_in := false  # 一時停止から戻った直後の 1 小節(判定済みの前の回の返しの小節)。数えとして見せる
 var _bar := {}
 var _head: Label
 var _turn_label: Label
@@ -68,7 +77,7 @@ func _ready() -> void:
 	_turn_label = Kit.label("", 28, Kit.C_TEXT, 700)
 	add_child(Kit.place(_turn_label, 0, 128, 1280, 44))
 	_center = Kit.label("", 72, Kit.C_TEXT, 800)
-	add_child(Kit.place(_center, 0, 320, 1280, 110))
+	add_child(Kit.place(_center, 0, 350, 1280, 110))  # 段の印(〜y 340)と重ならない高さ
 	_skip = Kit.label(S.SKIP, 20, Kit.C_DIM, 500)
 	_skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(Kit.place(_skip, 900, 670, 356, 36))
@@ -87,6 +96,14 @@ func start(p_mode: int, p_seed: int) -> void:
 	_over_at = -1
 	_song_lit.clear()
 	_layers = 0
+	_judge = {}
+	_results.clear()
+	_song_dots.clear()
+	_song_bar = -1
+	_turn_at = -100000
+	_gain_at = -100000
+	_tag_layer = -1
+	_lead_in = false
 	Music.set_layers(0)
 	if not frame_clock:
 		Music.start_at(0)
@@ -142,6 +159,8 @@ func pause_music() -> void:
 # 一時停止から戻る(D-13・FR-22)。今の回のお手本の 1 小節前へ sim を戻し、曲をその位置へ移して鳴らす。
 func resume() -> void:
 	sim.rewind_to_turn()
+	_song_dots.clear()
+	_lead_in = sim.judged > 0 and sim.judged < B.TURNS
 	_free = sim.tick
 	_behind_since = -1
 	Music.set_layers(_layers)
@@ -155,6 +174,8 @@ func _process(delta: float) -> void:
 	if sim == null:
 		return
 	var now := Time.get_ticks_msec()
+	for l: Label in [_head, _turn_label, _center]:
+		l.visible = not paused  # 一時停止の見出しと重ねない
 	position = Vector2.ZERO
 	if shake_on and now < _shake_until:
 		position = Vector2(randf_range(-B.SHAKE_PX, B.SHAKE_PX), randf_range(-B.SHAKE_PX, B.SHAKE_PX))
@@ -203,25 +224,44 @@ func _on_event(e: Dictionary) -> void:
 			_beat_at = now
 			_beat_n = e["beat"]
 			if e["beat"] == 0:
+				var before := Music.layers
 				Music.set_layers(_layers)  # 層は判定の後、次の小節の頭から(§9.4)
+				if Music.layers > before:
+					_layer_on_at = now  # 増えた層の札が、鳴り始めた小節の頭で膨らむ
 			if Music.layers == 0:
 				Notes.play("click")
 		"call_note":
 			Notes.play_key(e["key"])
+		"judge":
+			_judge = e.duplicate()
+			_judge["at"] = now
+			if int(e["points"]) > 0:
+				_gain_text = S.GAIN % Score.comma(int(e["points"]))
+				_gain_at = now
 		"turn_ok":
 			_turn_text = S.TURN_OK
 			_turn_at = now
+			_results.append(true)
 			_layers = int(e["layers"])
 			_tag_layer = _layers - 1
 			_tag_at = now
 		"turn_miss":
 			_turn_text = S.TURN_MISS
 			_turn_at = now
+			_results.append(false)
+			_life_lost_at = now
 			Notes.play("miss")
 			_shake_until = now + B.SHAKE_MS
 		"song_note":
 			Notes.play_key(e["key"], not e["own"])
 			_song_lit[e["key"]] = [now, e["own"]]
+			var at := sim.tick - 1 - B.SONG_START  # events は tick を進める前に出る
+			@warning_ignore("integer_division")
+			var bar := at / B.BAR_TICKS
+			if bar != _song_bar:
+				_song_bar = bar
+				_song_dots.clear()
+			_song_dots.append([float(at % B.BAR_TICKS) / B.EIGHTH_TICKS, int(e["key"]), bool(e["own"])])
 		"over":
 			Notes.play("over")
 			Music.stop()
@@ -232,11 +272,13 @@ func _on_event(e: Dictionary) -> void:
 func _refresh() -> void:
 	_snap = sim.snapshot()
 	var now := Time.get_ticks_msec()
-	var sec: int = _snap["section"]
+	if _lead_in and int(_snap["section"]) != TL.REPLY:
+		_lead_in = false
+	var sec := _view_section()
 	if sec != _section:
 		_section = sec
 		_section_at = now
-	_bar["turn"].text = S.BAR_SONG if sec >= TL.SONG else S.BAR_TURN % (maxi(int(_snap["turn"]), 0) + 1)
+	_bar["turn"].text = S.BAR_SONG if sec >= TL.SONG else S.BAR_TURN % ((int(_snap["judged"]) if _lead_in else maxi(int(_snap["turn"]), 0)) + 1)
 	_bar["points"].text = S.BAR_POINTS % Score.comma(int(_snap["points"]))
 	match sec:
 		TL.CALL:
@@ -247,6 +289,7 @@ func _refresh() -> void:
 			_head.text = S.HEAD_SONG
 		_:
 			_head.text = ""
+	_head.add_theme_color_override("font_color", _section_color(sec))  # お手本は黄、自分の番は青(印と同じ色)
 	_head.modulate.a = clampf(float(now - _section_at) / B.HEAD_FADE_MS, 0.0, 1.0)  # 区間が変わる時に 200 ms で入れ替える
 	_turn_label.text = _turn_text if now - _turn_at < B.RESULT_MS else ""
 	_turn_label.add_theme_color_override("font_color", Kit.C_PERFECT if _turn_text == S.TURN_OK else Kit.C_MISS)
@@ -260,8 +303,36 @@ func _refresh() -> void:
 	queue_redraw()
 
 
+# 画面で見せる区間。一時停止から戻った直後の 1 小節は、返しではなく数えとして見せる(押しても判定しない小節なので)。
+func _view_section() -> int:
+	return TL.COUNT if _lead_in else int(_snap["section"])
+
+
 func _flash(a: float) -> float:
 	return minf(a, B.REDUCED_FLASH_ALPHA) if reduce_flash else a
+
+
+static func _section_color(sec: int) -> Color:
+	match sec:
+		TL.CALL:
+			return Kit.C_CALL
+		TL.REPLY:
+			return Kit.C_PRESS
+	return Kit.C_TEXT
+
+
+# 小節の目盛りの上の x。at は 8 分音符の何番目(小数でよい。目盛りの外にもはみ出せる)。
+static func _ruler_x(at: float) -> float:
+	return B.RULER_X0 + (B.RULER_X1 - B.RULER_X0) * at / B.BAR_EIGHTHS
+
+
+# 押した音の印: 青い丸の中にキーの文字。own が偽なら(自分の曲のお手本の音)灰色の輪。
+func _press_dot(at: Vector2, k: int, own: bool = true, a: float = 1.0) -> void:
+	if own:
+		draw_circle(at, B.DOT_R, Color(Kit.C_PRESS, a))
+	else:
+		draw_arc(at, B.DOT_R - 1, 0, TAU, 32, Color(Kit.C_DIM, a), 2.0, true)
+	draw_string(Kit.font(800), Vector2(at.x - B.DOT_R, at.y + 6), S.KEYS[k], HORIZONTAL_ALIGNMENT_CENTER, B.DOT_R * 2, 17, Color(Kit.C_BG, a) if own else Color(Kit.C_DIM, a))
 
 
 func _draw() -> void:
@@ -269,23 +340,39 @@ func _draw() -> void:
 		return
 	var now := Time.get_ticks_msec()
 	var f := Kit.font(700)
-	# 上の帯: 残機(丸。失った物は線だけ)と層の札(鳴っている層は塗る)
+	var tick: int = _snap["tick"]
+	var sec := _view_section()
+	# 上の帯: 残機(丸。失った物は線だけ。失った時は赤い輪が広がる)
 	for k in B.LIVES:
 		var c := Vector2(300 + 34 * k, 32)
 		if k < int(_snap["lives"]):
 			draw_circle(c, 11, Kit.C_TEXT)
 		else:
 			draw_arc(c, 11, 0, TAU, 24, Kit.C_TEXT, 2.0, true)
+		if k == int(_snap["lives"]) and now - _life_lost_at < B.LIFE_LOST_MS:
+			var t := float(now - _life_lost_at) / B.LIFE_LOST_MS
+			draw_arc(c, 11 + 14 * t, 0, TAU, 32, Color(Kit.C_MISS, _flash(1.0 - t)), 3.0, true)
+	# 層の札: 鳴っている層は塗る。合った後、次の小節の頭までは薄く塗って待つ。鳴り始めたら膨らむ。鳴っている札は拍で明るくなる
+	var beat_t := float(now - _beat_at) / B.BEAT_LIT_MS
 	for k in B.MAX_LAYERS:
 		var r := Rect2(430 + 136 * k, 14, 124, 36)
 		var on := k < Music.layers
-		draw_rect(r, Color(Kit.C_LAYER, 0.85) if on else Color(1, 1, 1, 0.03))
+		if on and k == Music.layers - 1 and now - _layer_on_at < B.TAG_POP_MS:
+			r = r.grow(B.TAG_POP_PX * (1.0 - float(now - _layer_on_at) / B.TAG_POP_MS))
+		var fill := Color(Kit.C_LAYER, 0.85) if on else (Color(Kit.C_LAYER, 0.3) if k < _layers else Color(1, 1, 1, 0.03))
+		draw_rect(r, fill)
+		if on and beat_t < 1.0:
+			draw_rect(r, Color(1, 1, 1, _flash(0.22 * (1.0 - beat_t))))
 		draw_rect(r, Kit.C_LAYER, false, 2.0)
 		if k == _tag_layer and now - _tag_at < B.TAG_LIT_MS:
 			var a := _flash(1.0 - float(now - _tag_at) / B.TAG_LIT_MS)
 			draw_rect(r.grow(5), Color(Kit.C_LAYER, a), false, 4.0)
-		draw_string(f, Vector2(r.position.x, r.position.y + 26), S.LAYER_NAMES[k], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Kit.C_BG if on else Kit.C_LAYER)
-	# 小節の目盛り: 8 つの位置(拍は大きい点)と、今の位置の縦線
+		draw_string(f, Vector2(r.position.x, r.position.y + r.size.y / 2 + 8), S.LAYER_NAMES[k], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Kit.C_BG if on else Kit.C_LAYER)
+	# 入った点(判定の後、点の下に浮かんで消える)
+	if now - _gain_at < B.GAIN_MS:
+		var t := float(now - _gain_at) / B.GAIN_MS
+		draw_string(f, Vector2(1000, 76 - 12 * t), _gain_text, HORIZONTAL_ALIGNMENT_RIGHT, 256, 22, Color(Kit.C_PERFECT, 1.0 - t * t))
+	# 小節の目盛り: 8 つの位置(拍は大きい点)と、今の位置の縦線(お手本の間は黄、返しの間は青)
 	var y := B.RULER_Y
 	var step := (B.RULER_X1 - B.RULER_X0) / B.BAR_EIGHTHS
 	draw_line(Vector2(B.RULER_X0, y), Vector2(B.RULER_X1, y), Kit.C_RULER, 2.0)
@@ -294,15 +381,59 @@ func _draw() -> void:
 		var at := Vector2(B.RULER_X0 + step * i, y)
 		draw_circle(at, 7.0 if i % 2 == 0 else 4.0, Kit.C_RULER)
 		if beat_lit and i == _beat_n * 2:
-			draw_circle(at, 9.0, Color(Kit.C_NOW, _flash(0.9)))
-	var sec: int = _snap["section"]
+			draw_circle(at, 9.0, Color(_section_color(sec), _flash(0.9)))
 	if sec != TL.END:
-		var x := B.RULER_X0 + (B.RULER_X1 - B.RULER_X0) * float(int(_snap["tick"]) % B.BAR_TICKS) / B.BAR_TICKS
-		draw_line(Vector2(x, y - 26), Vector2(x, y + 26), Kit.C_NOW, 3.0)
-	for p: int in _snap["call_pos"]:
-		Kit.draw_diamond(self, Vector2(B.RULER_X0 + step * p, y + 40), 10.0, Kit.C_CALL)
-	for m: Array in _snap["marks"]:
-		Kit.draw_grade(self, Vector2(B.RULER_X0 + step * int(m[0]), y + 80), int(m[1]))
+		var x := _ruler_x(float(tick % B.BAR_TICKS) / B.EIGHTH_TICKS)
+		draw_line(Vector2(x, y - 26), Vector2(x, y + 26), _section_color(sec), 3.0)
+	var row := y + B.ROW_DY
+	# 1 段目: お手本の間は、鳴った音の位置に ◆。返しの間は、押した位置に青い丸(押したキーの文字)
+	if sec == TL.CALL:
+		for p: int in _snap["call_pos"]:
+			Kit.draw_diamond(self, Vector2(_ruler_x(p), row), 10.0, Kit.C_CALL)
+	var judged: int = _snap["judged"]
+	if judged < B.TURNS:
+		for p: Array in _snap["presses"]:
+			_press_dot(Vector2(_ruler_x(float(int(p[0]) - TL.reply_start(judged)) / B.EIGHTH_TICKS), row), int(p[1]))
+	# 判定の後: 同じ返しの小節の間は、お手本の位置(◇)と押した位置を並べて比べる。段の印とお手本のキーは、次の返しが始まるまで出す
+	if not _judge.is_empty() and not _lead_in:
+		var jt: int = _judge["turn"]
+		var fresh := now - int(_judge["at"]) < B.RESULT_MS
+		if sec == TL.REPLY and TL.turn_of(tick) == jt:
+			for p: int in _judge["pos"]:
+				Kit.draw_diamond(self, Vector2(_ruler_x(p), row), B.DOT_R * 1.55, Kit.C_CALL, false)  # 押した丸がぴったりなら ◇ の中に入る
+			for p: Array in _judge["presses"]:
+				_press_dot(Vector2(_ruler_x(float(int(p[0]) - TL.reply_start(jt)) / B.EIGHTH_TICKS), row), int(p[1]))
+		var keep := tick < TL.reply_start(jt + 1) if jt + 1 < B.TURNS else (sec == TL.SONG and fresh)
+		if keep:
+			var a := 1.0 if fresh or sec == TL.REPLY else B.OLD_MARK_ALPHA
+			var g: Array = _judge["grades"]
+			for i in g.size():
+				var at := Vector2(_ruler_x(int(_judge["pos"][i])), y + B.ROW_GRADE_DY)
+				Kit.draw_grade(self, at, int(g[i]), 11.0, a)
+				var lc := Kit.C_MISS if int(g[i]) == 3 else Kit.C_DIM
+				draw_string(f, Vector2(at.x - 30, at.y + 36), S.KEYS[int(_judge["keys"][i])], HORIZONTAL_ALIGNMENT_CENTER, 60, 20, Color(lc, a))
+	# 自分の曲: 今の小節で鳴った音(自分の音は青い丸、お手本は灰色の輪)
+	if sec == TL.SONG or sec == TL.END:
+		for d: Array in _song_dots:
+			_press_dot(Vector2(_ruler_x(d[0]), row), d[1], d[2])
+	# 回の進み: 8 つの回の結果(合った ●、外れ ×、まだ ○)。今の回(自分の曲では今の小節)を輪で囲む
+	var cur := -1
+	if sec == TL.CALL or sec == TL.REPLY:
+		cur = judged
+	elif sec == TL.SONG:
+		@warning_ignore("integer_division")
+		cur = (tick - B.SONG_START) / B.BAR_TICKS
+	for i in B.TURNS:
+		var at := Vector2(640 + (i - 3.5) * B.PIP_GAP, B.PIPS_Y)
+		if i < _results.size():
+			if _results[i]:
+				draw_circle(at, 8, Kit.C_PERFECT)
+			else:
+				Kit.draw_grade(self, at, 3, 7.0)
+		else:
+			draw_arc(at, 7, 0, TAU, 24, Kit.C_RULER, 2.0, true)
+		if i == cur:
+			draw_arc(at, 13, 0, TAU, 32, _section_color(sec) if sec != TL.SONG else Kit.C_LAYER, 2.0, true)
 	# 鍵盤: 押した鍵は沈んで中を塗る。手がかりは縁だけを光らせる。自分の曲は鳴った鍵を塗る(お手本は薄く)
 	var lit: Array = _snap["lit"]
 	for k in B.KEYS_N:
