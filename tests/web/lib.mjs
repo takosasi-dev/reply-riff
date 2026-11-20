@@ -96,7 +96,7 @@ export function serve() {
 	const server = spawn(py, ['-m', 'http.server', String(HTTP_PORT), '--bind', '127.0.0.1', '--directory', root], { stdio: 'ignore' });
 	return {
 		url: `http://127.0.0.1:${HTTP_PORT}/reply-riff/`,
-		stop: () => { server.kill(); rmSync(path.join(root, 'reply-riff'), { force: true }); },
+		stop: () => { server.kill(); rmSync(path.join(root, 'reply-riff'), { force: true }); rmSync(root, { recursive: true, force: true }); }, // 先に junction だけ外す(配った物を消さない)
 	};
 }
 
