@@ -18,6 +18,8 @@ const GRADE_Y := 304.0
 var menu: Menu
 var share := ""
 var celebrate := false  # 新しい記録(判子と紙吹雪。テストが読む)
+var rank := 0  # 段位(v0.3.1。Score.rank。テストが読む)
+var _rank_at := Vector2(200, 128)
 var _points := 0
 var _turns_ok := 0
 var _counts: Array = []
@@ -52,6 +54,8 @@ func build(mode: int, result: Dictionary, rec: Dictionary, share_text: String) -
 		add_child(Kit.place(Kit.label(text, 22, Kit.C_TEXT if rec["new_best"] else Kit.C_DIM, 700, 4), 0, 194, 1280, 34))
 	var full := Kit.display().get_string_size(S.RES_POINTS % Score.comma(_points), HORIZONTAL_ALIGNMENT_LEFT, -1, 100).x
 	_badge_at = Vector2(minf(640 + full / 2 + 60, 1180), 96)  # 判子は点の字の右上に少し重ねる
+	rank = Score.rank(_points)
+	_rank_at = Vector2(maxf(640 - full / 2 - 100, 100), 128)  # 段位の看板は点の字の左(判子と反対の側)
 	var turns := Kit.label(S.RES_TURNS % _turns_ok, 24, Kit.C_TEXT, 700, 4)
 	turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(Kit.place(turns, 300, TALLY_Y - 20, 220, 40))
@@ -138,8 +142,72 @@ func _stamp_at() -> int:
 	return B.COUNT_MS + B.TURNS * B.TALLY_STEP_MS
 
 
+# 段位の看板(v0.3.1): 点が数え上がってから、点の左に吊り下がる。祝いではない(判子・紙吹雪・「記録」の言葉と重ねない)。
+# 段は名前の字と、下の 5 つの電球の灯った数(形)で出す。色だけに頼らない。
+func rank_rect() -> Rect2:
+	return Rect2(_rank_at - Vector2(76, 66), Vector2(152, 114))  # 吊りひもまで
+
+
+func badge_rect() -> Rect2:
+	return Rect2(_badge_at - Vector2(88, 46), Vector2(176, 92))  # 傾けた判子を囲む
+
+
+func rank_shown(t: int) -> bool:
+	return t >= B.COUNT_MS
+
+
+# 吊り下がりの進み 0〜1(動きを減らすと出た時から 1)。
+func rank_k(t: int) -> float:
+	if Kit.calm:
+		return 1.0
+	return clampf(float(t - B.COUNT_MS) / B.RANK_DROP_MS, 0.0, 1.0)
+
+
+# 灯った電球の数(段 + 1 まで。動きを減らすと出た時から全部)。
+@warning_ignore("integer_division")
+func rank_lit(t: int) -> int:
+	if Kit.calm:
+		return rank + 1
+	return clampi((t - B.COUNT_MS - B.RANK_DROP_MS) / B.RANK_BULB_MS + 1, 0, rank + 1)
+
+
+func _draw_rank(t: int) -> void:
+	if not rank_shown(t):
+		return
+	var k := rank_k(t)
+	var e := 1.0 - k
+	draw_set_transform(_rank_at + Vector2(0, -30.0 * e * e), 0.14 * sin(k * TAU) * e)
+	var a := minf(1.0, k * 3.0 + 0.001) if not Kit.calm else 1.0
+	for x: float in [-44.0, 44.0]:  # 吊りひもと鋲
+		draw_line(Vector2(x, -48), Vector2(x * 0.7, -64), Color(Kit.C_EDGE, a), 2.0, true)
+		draw_circle(Vector2(x * 0.7, -64), 3.0, Color(Kit.C_EDGE, a))
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(Kit.C_PANEL, a)
+	sb.border_color = Color(Kit.C_TEXT, a)
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(6)
+	sb.shadow_color = Color(Kit.C_FLOOR, 0.6 * a)
+	sb.shadow_size = 6
+	sb.shadow_offset = Vector2(0, 4)
+	sb.anti_aliasing = true
+	draw_style_box(sb, Rect2(-76, -48, 152, 96))
+	draw_rect(Rect2(-69, -41, 138, 82), Color(Kit.C_EDGE, a), false, 1.0)
+	draw_string(Kit.font(700), Vector2(-76, -22), S.RANK_CAPTION, HORIZONTAL_ALIGNMENT_CENTER, 152, 14, Color(Kit.C_DIM, a))
+	draw_string(Kit.font(800), Vector2(-76, 16), S.RANK_NAMES[rank], HORIZONTAL_ALIGNMENT_CENTER, 152, 30, Color(Kit.C_TEXT, a))
+	var lit := rank_lit(t)
+	for i in S.RANK_NAMES.size():
+		var c := Vector2(-40 + i * 20, 30)
+		if i < lit:
+			draw_circle(c, 8.0, Color(Kit.C_SPOT, 0.18 * a))
+			draw_circle(c, 4.5, Color(Kit.C_TEXT, a))
+		else:
+			draw_arc(c, 4.5, 0, TAU, 16, Color(Kit.C_EDGE, a), 1.5, true)
+	draw_set_transform_matrix(Transform2D.IDENTITY)
+
+
 func _draw() -> void:
 	var t := Time.get_ticks_msec() - _shown_at
+	_draw_rank(t)
 	if Kit.calm:
 		t = 100000  # 動きを減らす: 置き終えた形だけ
 	# 合った回: 8 つの丸(プレイの「回の進み」と同じ形と色。合った数だけ緑で塗る)。点の数え上げの後に 1 つずつ跳ねて塗る

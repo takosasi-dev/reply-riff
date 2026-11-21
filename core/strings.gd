@@ -3,7 +3,7 @@
 extends RefCounted
 
 const NAME := "ReplyRiff"
-const VERSION := "v0.3.0"
+const VERSION := "v0.3.1"
 const URL := "https://takosasi-dev.github.io/reply-riff/"
 
 # 鍵盤(§9.1。左から 0〜7)
@@ -63,6 +63,9 @@ const COPIED := "コピーを試した。貼れない時は枠から写す"
 const SAVE_FAILED := "このブラウザでは記録を残せない"
 const RES_BADGE := "自己最高"  # v0.3.0: 新しい記録の判子
 const MENU_SELECT_ALL := "すべて選ぶ"  # v0.3.0: 共有の枠の右クリックのメニュー(ほかに「コピー」)
+# v0.3.1: 段位(低い順。balance.gd の RANK_POINTS の区切りで決まる)。小さなライブハウスの出番の格
+const RANK_CAPTION := "段位"
+const RANK_NAMES := ["路上", "前座", "二番手", "トリ", "ワンマン"]
 
 # 共有する文字(§9.11)
 const MODE_LABEL := ["今日の曲", "練習"]
@@ -70,7 +73,7 @@ const DAILY_FIRST := "今日の曲・1回目"
 const SHARE_HEAD := "%s %s(%s)"
 const SHARE_DONE := "8 小節"
 const SHARE_STOP := "%d 回目で止まった"
-const SHARE_BODY := "%s / 外れ %d 回 / ぴったり %d / %s点"
+const SHARE_BODY := "%s / 外れ %d 回 / ぴったり %d / %s点(%s)"  # v0.3.1: 最後のかっこは段位
 
 # S4
 const SETTINGS := "設定"

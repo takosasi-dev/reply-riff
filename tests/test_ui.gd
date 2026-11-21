@@ -267,7 +267,7 @@ func test_fr25_enter_skips_song() -> bool:
 	frames(m, 1, 0.0)
 	press(m, KEY_ENTER)
 	eq(m.screen, "result", "自分の曲の間の Enter で結果へ")
-	eq(m.current.share.split("\n")[1], "8 小節 / 外れ 0 回 / ぴったり 39 / 18,100点", "飛ばしても最後まで行った扱い")
+	eq(m.current.share.split("\n")[1], "8 小節 / 外れ 0 回 / ぴったり 39 / 18,100点(ワンマン)", "飛ばしても最後まで行った扱い")
 	_done(m)
 	return true
 
@@ -490,5 +490,43 @@ func test_result_celebrates_new_best() -> bool:
 	_finish(m)  # 何も押さない
 	ok(not m.current.celebrate, "0 点は祝わない")
 	eq(m.current.menu.sel, 0, "もう1回に最初から合わせてある")
+	_done(m)
+	return true
+
+
+# v0.3.1: 段位の看板。点から出し、点が数え上がってから出る。新しい記録の判子と場所が重ならない。
+# 点滅を弱める(動きを減らす)と、出た時から止まった形(吊り下がり済み・電球は全部)。もう1回へのフォーカスは変えない。
+func test_result_rank_sign() -> bool:
+	var m := _main()
+	_to_play(m)
+	var bot := Bots.new(Bots.EXACT)
+	while not m.play.sim.is_over():
+		bot.act(m.play.sim)
+		m.play.sim.step()
+	m.play.finished.emit(m.play.sim.result())
+	var r: Control = m.current
+	eq(r.rank, B.RANK_POINTS.size(), "18,100 点はいちばん上")
+	ok(r.celebrate, "新しい記録でもある")
+	ok(not r.rank_rect().intersects(r.badge_rect()), "18,100 点: 看板と判子が重ならない")
+	ok(not r.rank_shown(B.COUNT_MS - 1) and r.rank_shown(B.COUNT_MS), "点が数え上がってから出る")
+	eq(r.rank_k(B.COUNT_MS), 0.0, "出た時は吊り下がり始め")
+	eq(r.rank_k(B.COUNT_MS + B.RANK_DROP_MS), 1.0, "揺れが止まる")
+	eq(r.rank_lit(B.COUNT_MS), 0, "電球はまだ")
+	eq(r.rank_lit(100000), r.rank + 1, "電球は段 + 1 個")
+	ok(B.COUNT_MS + B.RANK_DROP_MS + r.rank * B.RANK_BULB_MS < B.COUNT_MS + B.TURNS * B.TALLY_STEP_MS, "電球は判子より前に灯り終える(同時に言わない)")
+	eq(r.menu.sel, 0, "もう1回に合わせたまま")
+	r._shown_at -= 1000
+	frames(m, 1)
+	press(m, KEY_ENTER)
+	_finish(m)  # 何も押さない = 0 点
+	r = m.current
+	eq(r.rank, 0, "0 点はいちばん下")
+	ok(not r.rank_rect().intersects(r.badge_rect()), "0 点: 看板と判子の場所が重ならない")
+	Kit.calm = true
+	eq(r.rank_k(B.COUNT_MS), 1.0, "動きを減らす: 吊り下がり済み")
+	eq(r.rank_lit(B.COUNT_MS), r.rank + 1, "動きを減らす: 電球は全部")
+	ok(not r.rank_shown(B.COUNT_MS - 1), "動きを減らしても、点が数え上がってから")
+	Kit.calm = false
+	eq(r.menu.sel, 0, "もう1回に合わせたまま")
 	_done(m)
 	return true

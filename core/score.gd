@@ -18,6 +18,15 @@ static func turn_points(grades: Array, n: int) -> int:
 	return pts
 
 
+# 段位(v0.3.1)。0 = いちばん下 〜 RANK_POINTS.size() = いちばん上。区切りの点ちょうどで上の段になる。保存せず点から毎回出す。
+static func rank(points: int) -> int:
+	var r := 0
+	for p: int in B.RANK_POINTS:
+		if points >= p:
+			r += 1
+	return r
+
+
 # 18100 → "18,100"
 static func comma(n: int) -> String:
 	var s := str(absi(n))

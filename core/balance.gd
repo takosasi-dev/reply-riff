@@ -35,6 +35,9 @@ const MAX_LAYERS := 4
 const NOTE_POINTS := [300, 200, 100, 0]  # ぴったり・よい・おしい・外れ
 const TURN_BONUS := 500
 const PERFECT_BONUS := 300
+# 段位の区切りの点(v0.3.1。仕様書 §9.8)。仮の値: bot の点の分布から決めた。人が遊んで決め直す。
+# 名前は strings.gd の RANK_NAMES(この配列より 1 つ多い)
+const RANK_POINTS := [3000, 8000, 12500, 16500]
 
 # 回の表(§9.5。INV-6 で中身を変えない)。keys はキーの番号(A S D F J K L ; = 0〜7)
 const TURN_TABLE := [
@@ -101,6 +104,8 @@ const POINTS_BUMP_MS := 240  # 点が増えた時に跳ねる
 const POINTS_BUMP := 0.22
 const TALLY_STEP_MS := 80  # 結果: 合った回のレコードを 1 枚ずつ置く間
 const CONFETTI_MS := 1800  # 結果: 新しい記録の紙吹雪
+const RANK_DROP_MS := 260  # 結果(v0.3.1): 点が数え上がった後、段位の看板が吊り下がって揺れが止まるまで
+const RANK_BULB_MS := 70  # その後、看板の電球を 1 つずつ灯す間
 
 # 画面の配置(画面設計書 §3)
 const RULER_X0 := 240.0

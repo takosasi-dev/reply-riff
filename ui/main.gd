@@ -487,5 +487,6 @@ func state() -> Dictionary:
 		out["play"] = sn
 	if screen == "result" and current is Result:
 		out["share"] = (current as Result).share
+		out["rank"] = (current as Result).rank  # v0.3.1: 段位(窓なし Chrome の撮影が読む)
 	return out
 
