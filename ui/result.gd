@@ -168,6 +168,8 @@ func rank_k(t: int) -> float:
 func rank_lit(t: int) -> int:
 	if Kit.calm:
 		return rank + 1
+	if t < B.COUNT_MS + B.RANK_DROP_MS:  # 割り算は 0 に向けて切り捨てるので、吊り下がりの間は先に外す
+		return 0
 	return clampi((t - B.COUNT_MS - B.RANK_DROP_MS) / B.RANK_BULB_MS + 1, 0, rank + 1)
 
 

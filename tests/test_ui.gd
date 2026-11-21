@@ -512,6 +512,8 @@ func test_result_rank_sign() -> bool:
 	eq(r.rank_k(B.COUNT_MS), 0.0, "出た時は吊り下がり始め")
 	eq(r.rank_k(B.COUNT_MS + B.RANK_DROP_MS), 1.0, "揺れが止まる")
 	eq(r.rank_lit(B.COUNT_MS), 0, "電球はまだ")
+	eq(r.rank_lit(B.COUNT_MS + B.RANK_DROP_MS - 1), 0, "吊り下がりが止まるまで電球は灯らない")
+	eq(r.rank_lit(B.COUNT_MS + B.RANK_DROP_MS), 1, "止まったら 1 つ目")
 	eq(r.rank_lit(100000), r.rank + 1, "電球は段 + 1 個")
 	ok(B.COUNT_MS + B.RANK_DROP_MS + r.rank * B.RANK_BULB_MS < B.COUNT_MS + B.TURNS * B.TALLY_STEP_MS, "電球は判子より前に灯り終える(同時に言わない)")
 	eq(r.menu.sel, 0, "もう1回に合わせたまま")
