@@ -106,9 +106,7 @@ func _clear(out_ms: int = B.TRANS_OUT_MS, in_ms: int = B.TRANS_IN_MS) -> void:
 		for n in [c] + c.find_children("*", "Control", true, false):
 			(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_ghosts.append(c)
-	if _pending != null and is_instance_valid(_pending):
-		_pending.modulate.a = 1.0
-	_pending = null
+	_pending = null  # まだ見せていない画面は透明のまま前の画面になる(連打で一瞬出さない)
 	curtain.start(out_ms if not _ghosts.is_empty() else 0, in_ms)
 	current = null
 	play = null
