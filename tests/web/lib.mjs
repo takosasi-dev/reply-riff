@@ -8,7 +8,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const WEB = path.join(ROOT, 'build', 'web');
+export const WEB = process.env.RR_WEB ? path.resolve(process.env.RR_WEB) : path.join(ROOT, 'build', 'web'); // RR_WEB で前の版の書き出しと比べられる
 export const OUT = path.join(ROOT, 'build', 'web_shots');
 export const SAVE_KEY = 'reply-riff/save'; // save/save_store.gd の WEB_KEY
 const HTTP_PORT = Number(process.env.RR_HTTP_PORT || 8818);

@@ -19,13 +19,11 @@ const Settings := preload("res://ui/settings.gd")
 const Pause := preload("res://ui/pause.gd")
 
 
-# 背景(上から下へ 2 色の帯)。
-class Bg extends Control:
-	func _draw() -> void:
-		Kit.draw_bg(self)
-
-
 var stage: Control
+var backdrop: Kit.Backdrop  # 背景(壁・スポット・埃。v0.3.0)
+var curtain: Kit.Curtain  # 画面の切り替わりの幕(見た目だけ。画面の入れ替えはすぐ)
+var _pending: Control = null  # 幕が暗くなり切るまで隠しておく新しい画面
+var _ghosts: Array = []  # 幕が暗くなり切るまで残す前の画面(動かさない・押せない)
 var store: Store
 var screen := "gate"  # gate / title / play / result / settings / keys
 var current: Control = null  # 今の画面(play の時は play)
@@ -55,7 +53,11 @@ func _ready() -> void:
 	stage = Control.new()
 	stage.size = Vector2(1280, 720)
 	add_child(stage)
-	stage.add_child(Bg.new())
+	backdrop = Kit.Backdrop.new()
+	backdrop.size = Vector2(1280, 720)
+	stage.add_child(backdrop)
+	curtain = Kit.Curtain.new()
+	add_child(curtain)
 	get_viewport().size_changed.connect(_layout)
 	_layout()
 	store = Store.new()
@@ -72,7 +74,10 @@ func _ready() -> void:
 
 # 縦横比が 16:9 でない窓では、表示の範囲が広がる(project.godot の aspect=expand)。舞台をその真ん中に置く。
 func _layout() -> void:
-	stage.position = ((get_viewport().get_visible_rect().size - stage.size) / 2.0).floor()
+	var vis := get_viewport().get_visible_rect().size
+	stage.position = ((vis - stage.size) / 2.0).floor()
+	curtain.size = vis
+	backdrop.queue_redraw()  # 幕を見えている端に下げ直す
 
 
 static func _flag(flag: String) -> bool:
@@ -84,19 +89,46 @@ static func _flag(flag: String) -> bool:
 
 func _apply_settings() -> void:
 	Notes.set_volume(int(store.settings()["volume"]))
+	Kit.calm = store.settings()["reduce_flash"]  # 点滅を弱める = 動きも減らす(画面設計書 §10)
 
 
-func _clear() -> void:
+# 画面を入れ替える前に呼ぶ。今の画面は「前の画面」として幕が暗くなり切るまで残し(動かさない・押せない)、
+# 次に足す画面(_enter)は幕が暗くなり切るまで隠す。入力はすぐ次の画面へ行く(切り替わりは見た目だけ)。
+func _clear(out_ms: int = B.TRANS_OUT_MS, in_ms: int = B.TRANS_IN_MS) -> void:
 	Music.stop()
-	if pause_view != null:
-		pause_view.queue_free()
-		pause_view = null
+	pause_view = null
+	_settings_overlay = null
+	_drop_ghosts()
 	for c in stage.get_children():
-		if c is Bg:
+		if c == backdrop or c.is_queued_for_deletion():
 			continue
-		c.queue_free()
+		c.process_mode = Node.PROCESS_MODE_DISABLED
+		for n in [c] + c.find_children("*", "Control", true, false):
+			(n as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ghosts.append(c)
+	if _pending != null and is_instance_valid(_pending):
+		_pending.modulate.a = 1.0
+	_pending = null
+	curtain.start(out_ms if not _ghosts.is_empty() else 0, in_ms)
 	current = null
 	play = null
+
+
+# 新しい画面を舞台に足す。幕が暗くなり切るまでは透明にしておく。
+func _enter(c: Control, lively: float = 1.0) -> void:
+	stage.add_child(c)
+	backdrop.lively = lively
+	backdrop.queue_redraw()
+	if not curtain.covered():
+		c.modulate.a = 0.0
+		_pending = c
+
+
+func _drop_ghosts() -> void:
+	for g in _ghosts:
+		if is_instance_valid(g):
+			g.queue_free()
+	_ghosts.clear()
 
 
 # --- S0 始める ---
@@ -106,14 +138,19 @@ func _show_gate() -> void:
 	screen = "gate"
 	var g := Control.new()
 	g.size = Vector2(1280, 720)
-	g.add_child(Kit.place(Kit.label(S.NAME, 72, Kit.C_TEXT, 800), 0, 220, 1280, 100))
-	g.add_child(Kit.place(Kit.label(S.S0_START, 28, Kit.C_TEXT, 500), 0, 360, 1280, 44))
-	g.add_child(Kit.place(Kit.label(S.S0_KEYBOARD, 18, Kit.C_DIM), 0, 410, 1280, 30))
-	_touch_note = Kit.label(S.TOUCH, 22, Kit.C_WARN, 700)
+	g.add_child(Kit.place(Kit.Logo.new(), 0, 170, 1280, 170))
+	var start := Kit.label(S.S0_START, 28, Kit.C_TEXT, 700, 6)
+	g.add_child(Kit.place(start, 0, 380, 1280, 44))
+	g.add_child(Kit.place(Kit.label(S.S0_KEYBOARD, 18, Kit.C_DIM, 500), 0, 430, 1280, 30))
+	_touch_note = Kit.label(S.TOUCH, 22, Kit.C_WARN, 700, 4)
 	_touch_note.visible = false
-	g.add_child(Kit.place(_touch_note, 0, 470, 1280, 40))
-	stage.add_child(g)
+	g.add_child(Kit.place(_touch_note, 0, 490, 1280, 40))
+	_enter(g)
 	current = g
+	if not Kit.calm:  # 「始める」をゆっくり明滅させる(点滅を弱めると止める)
+		var tw := start.create_tween().set_loops()
+		tw.tween_property(start, "modulate:a", 0.45, 0.9).set_trans(Tween.TRANS_SINE)
+		tw.tween_property(start, "modulate:a", 1.0, 0.9).set_trans(Tween.TRANS_SINE)
 
 
 func _input(event: InputEvent) -> void:
@@ -156,7 +193,7 @@ func _show_title() -> void:
 	var t := Title.new()
 	t.build(store, d["day"], d["date"], title_sel)
 	t.chosen.connect(_on_title)
-	stage.add_child(t)
+	_enter(t, 1.0)
 	current = t
 
 
@@ -189,7 +226,7 @@ func _today() -> Dictionary:
 # --- S2 プレイ ---
 
 func _start(r: Dictionary) -> void:
-	_clear()
+	_clear(B.TRANS_PLAY_OUT_MS, B.TRANS_PLAY_IN_MS)
 	run = r
 	clock_log.clear()
 	screen = "play"
@@ -198,7 +235,7 @@ func _start(r: Dictionary) -> void:
 	play.shake_on = st["shake"]
 	play.reduce_flash = st["reduce_flash"]
 	play.frame_clock = auto and not music_clock
-	stage.add_child(play)
+	_enter(play, 0.6)
 	play.start(int(r["mode"]), int(r["seed"]))
 	if auto:
 		play.bot = Bots.new(Bots.EXACT if _auto_results == 0 else Bots.IDLE)
@@ -276,7 +313,7 @@ func _on_finished(result: Dictionary) -> void:
 	v.build(int(r["mode"]), result, rec, text)
 	v.retry.connect(_again)
 	v.to_title.connect(_show_title)
-	stage.add_child(v)
+	_enter(v, 0.8)
 	current = v
 	if auto:
 		_auto_results += 1
@@ -298,6 +335,9 @@ func _show_settings(from: String) -> void:
 		s.add_child(Kit.place(dim, -2000, -2000, 5280, 4720))  # 余りまで覆う(aspect=expand)
 		s.move_child(dim, 0)
 		stage.add_child(s)
+		if not Kit.calm:
+			s.modulate.a = 0.0
+			s.create_tween().tween_property(s, "modulate:a", 1.0, B.PAUSE_FADE_MS / 1000.0)
 		current = s
 		screen = "settings"
 		pause_view.process_mode = Node.PROCESS_MODE_DISABLED
@@ -305,7 +345,7 @@ func _show_settings(from: String) -> void:
 	else:
 		_clear()
 		screen = "settings"
-		stage.add_child(s)
+		_enter(s, 0.8)
 		current = s
 
 
@@ -337,7 +377,7 @@ func _show_keys() -> void:
 	_keys_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_keys_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
 	g.add_child(Kit.place(_keys_label, 40, 80, 1200, 620))
-	stage.add_child(g)
+	_enter(g, 0.6)
 	current = g
 
 
@@ -355,6 +395,12 @@ func _keys_input(ev: InputEventKey) -> void:
 # --- 自動の確かめ(smoke) ---
 
 func _process(_delta: float) -> void:
+	if curtain.covered():  # 幕が暗くなり切った: 前の画面を消し、新しい画面を見せる(幕の輪が開く)
+		_drop_ghosts()
+		if _pending != null:
+			if is_instance_valid(_pending):
+				_pending.modulate.a = 1.0
+			_pending = null
 	if not auto:
 		return
 	match screen:
@@ -418,6 +464,7 @@ func _after_draw() -> void:
 	_dbg_n += 1
 	if _dbg_n % 60 == 0:
 		JavaScriptBridge.eval("window.rrClock=" + JSON.stringify(JSON.stringify(clock_log)), true)
+		JavaScriptBridge.eval("window.rrFrames=" + JSON.stringify(JSON.stringify(frame_ms.slice(-600))), true)  # 重さの目安(tests/web/fps.mjs)
 
 
 func state() -> Dictionary:

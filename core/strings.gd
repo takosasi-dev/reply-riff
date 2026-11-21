@@ -3,7 +3,7 @@
 extends RefCounted
 
 const NAME := "ReplyRiff"
-const VERSION := "v0.2.0"
+const VERSION := "v0.3.0"
 const URL := "https://takosasi-dev.github.io/reply-riff/"
 
 # 鍵盤(§9.1。左から 0〜7)
@@ -26,6 +26,7 @@ const REC_TODAY_BEST := "今日の最高 %s点"
 const REC_BEST := "最高 %s点"
 const REC_NONE := "まだ遊んでいない"
 const SOUND_NOTE := "音を出して遊んでほしい"
+const KEY_TRY := "8 つのキーで試し弾き"  # v0.3.0
 const LOAD_FAILED := "保存を読めなかったので、記録を初めからにした"
 
 # S2
@@ -50,16 +51,18 @@ const RES_STOP := "%d 回目で曲が止まった"
 const RES_POINTS := "%s点"
 const RES_NEW_BEST := "最高 +%s(新しい記録)"
 const RES_TO_BEST := "最高まで −%s"
-const RES_TODAY_BEST := "(今日の最高 %s点)"
+const RES_TODAY_BEST := " / 今日の最高 %s点"  # v0.3.0: かっこが 2 つ続かないように
 const RES_TURNS := "合った回 %d/8"
 const RES_LIVES := "残機 %d"
 const GRADE_NAMES := ["ぴったり", "よい", "おしい", "外れ"]
-const RES_GRADE := "%s %d"
+const RES_GRADE := "%s %d 音"  # v0.3.0: 音の数(「外れ n 回」の回の数と分ける)
 const B_RETRY := "もう1回"
 const B_COPY := "コピー"
 const B_TITLE := "タイトルへ"
 const COPIED := "コピーを試した。貼れない時は枠から写す"
 const SAVE_FAILED := "このブラウザでは記録を残せない"
+const RES_BADGE := "自己最高"  # v0.3.0: 新しい記録の判子
+const MENU_SELECT_ALL := "すべて選ぶ"  # v0.3.0: 共有の枠の右クリックのメニュー(ほかに「コピー」)
 
 # 共有する文字(§9.11)
 const MODE_LABEL := ["今日の曲", "練習"]
@@ -77,11 +80,13 @@ const SET_FLASH := "点滅を弱める"
 const ON := "入"
 const OFF := "切"
 const B_BACK := "戻る"
+const SET_HINT := "上下で選ぶ / 左右で変える / Esc で戻る"  # v0.3.0
 
 # S5
 const PAUSE := "一時停止"
 const B_RESUME := "続ける"
 const B_RESTART := "やり直す"
+const PAUSE_HINT := "Esc で続ける / R でやり直す"  # v0.3.0
 
 # キーの確かめ(共通 §3 の 22。?keys=1 の時だけ。Esc 2 回でタイトルへ)
 const KEYS_TITLE := "キーの確かめ(Esc 2 回でタイトルへ)"

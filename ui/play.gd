@@ -51,10 +51,14 @@ var _gain_at := -100000
 var _song_dots: Array = []  # 自分の曲の今の小節で鳴った音 [8 分音符の位置, キー, 自分の音か]
 var _song_bar := -1
 var _lead_in := false  # 一時停止から戻った直後の 1 小節(判定済みの前の回の返しの小節)。数えとして見せる
+var _pts_from := 0  # 上の帯の点の数え上げ(v0.3.0): 前の値・行き先・始めた時刻
+var _pts_to := 0
+var _pts_at := -100000
 var _bar := {}
 var _head: Label
 var _turn_label: Label
 var _center: Label
+var _count: Label
 var _skip: Label
 var _ime: Label
 
@@ -64,20 +68,21 @@ func _ready() -> void:
 	var esc := Kit.place(Kit.button("Esc", S.ESC, 20), 24, 12, 72, 40)
 	esc.pressed.connect(func() -> void: pause_requested.emit())
 	add_child(esc)
-	for k: String in ["turn", "points"]:
-		var l := Kit.label("", 26, Kit.C_TEXT, 700)
-		add_child(l)
-		_bar[k] = l
+	_bar["turn"] = Kit.label("", 24, Kit.C_TEXT, 700, 4)
 	_bar["turn"].horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	Kit.place(_bar["turn"], 116, 8, 160, 48)
+	add_child(Kit.place(_bar["turn"], 128, 8, 150, 48))
+	_bar["points"] = Kit.big_label("", 40)  # 一番大事な数字なので一番大きい(v0.3.0)
 	_bar["points"].horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	Kit.place(_bar["points"], 1000, 8, 256, 48)
-	_head = Kit.label("", 36, Kit.C_TEXT, 700)
+	add_child(Kit.place(_bar["points"], 976, 0, 280, 62))
+	_bar["points"].pivot_offset = Vector2(280, 34)
+	_head = Kit.label("", 36, Kit.C_TEXT, 800, 6)
 	add_child(Kit.place(_head, 0, 76, 1280, 56))
-	_turn_label = Kit.label("", 28, Kit.C_TEXT, 700)
+	_turn_label = Kit.label("", 28, Kit.C_TEXT, 800, 6)
 	add_child(Kit.place(_turn_label, 0, 128, 1280, 44))
-	_center = Kit.label("", 72, Kit.C_TEXT, 800)
+	_center = Kit.label("", 72, Kit.C_TEXT, 800, 8)
 	add_child(Kit.place(_center, 0, 350, 1280, 110))  # 段の印(〜y 340)と重ならない高さ
+	_count = Kit.big_label("", 110)  # 数えの 1・2・3・4(題字の字体)
+	add_child(Kit.place(_count, 0, 330, 1280, 140))
 	_skip = Kit.label(S.SKIP, 20, Kit.C_DIM, 500)
 	_skip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 	add_child(Kit.place(_skip, 900, 670, 356, 36))
@@ -104,6 +109,9 @@ func start(p_mode: int, p_seed: int) -> void:
 	_gain_at = -100000
 	_tag_layer = -1
 	_lead_in = false
+	_pts_from = 0
+	_pts_to = 0
+	_pts_at = -100000
 	Music.set_layers(0)
 	if not frame_clock:
 		Music.start_at(0)
@@ -174,7 +182,7 @@ func _process(delta: float) -> void:
 	if sim == null:
 		return
 	var now := Time.get_ticks_msec()
-	for l: Label in [_head, _turn_label, _center]:
+	for l: Label in [_head, _turn_label, _center, _count]:
 		l.visible = not paused  # 一時停止の見出しと重ねない
 	position = Vector2.ZERO
 	if shake_on and now < _shake_until:
@@ -187,6 +195,8 @@ func _process(delta: float) -> void:
 		_refresh()
 		return
 	if paused or _over_at == -2:
+		if paused:
+			_refresh()  # 点の数え上げを止まったまま残さない(読むだけ)
 		return
 	# 曲の位置は毎フレーム読む(くり返しの回数と「止まっていないか」はここで更新される)
 	var music_tick := 0.0 if frame_clock else Music.song_sec() * B.TICK_HZ
@@ -279,7 +289,16 @@ func _refresh() -> void:
 		_section = sec
 		_section_at = now
 	_bar["turn"].text = S.BAR_SONG if sec >= TL.SONG else S.BAR_TURN % ((int(_snap["judged"]) if _lead_in else maxi(int(_snap["turn"]), 0)) + 1)
-	_bar["points"].text = S.BAR_POINTS % Score.comma(int(_snap["points"]))
+	# 点: 増えたら数え上がって跳ねる(点滅を弱めると跳ねない)
+	var pts := int(_snap["points"])
+	if pts != _pts_to:
+		_pts_from = _shown_points(now)
+		_pts_to = pts
+		_pts_at = now
+	_bar["points"].text = S.BAR_POINTS % Score.comma(_shown_points(now))
+	var bump := clampf(float(now - _pts_at) / B.POINTS_BUMP_MS, 0.0, 1.0)
+	var sc := 1.0 if Kit.calm else 1.0 + B.POINTS_BUMP * (1.0 - bump) * (1.0 - bump)
+	_bar["points"].scale = Vector2(sc, sc)
 	match sec:
 		TL.CALL:
 			_head.text = S.HEAD_CALL
@@ -293,14 +312,19 @@ func _refresh() -> void:
 	_head.modulate.a = clampf(float(now - _section_at) / B.HEAD_FADE_MS, 0.0, 1.0)  # 区間が変わる時に 200 ms で入れ替える
 	_turn_label.text = _turn_text if now - _turn_at < B.RESULT_MS else ""
 	_turn_label.add_theme_color_override("font_color", Kit.C_PERFECT if _turn_text == S.TURN_OK else Kit.C_MISS)
-	if _over_at >= 0:
-		_center.text = _over_text
-	elif sec == TL.COUNT:
-		_center.text = str(_beat_n + 1)  # 数え: 1・2・3・4
-	else:
-		_center.text = ""
+	_center.text = _over_text if _over_at >= 0 else ""
+	_count.text = str(_beat_n + 1) if _over_at < 0 and sec == TL.COUNT else ""  # 数え: 1・2・3・4
+	var beat_k := clampf(float(now - _beat_at) / B.BEAT_LIT_MS, 0.0, 1.0)
+	var csc := 1.0 if Kit.calm else 1.0 + 0.18 * (1.0 - beat_k)  # 拍の頭で少し大きく
+	_count.pivot_offset = _count.size / 2
+	_count.scale = Vector2(csc, csc)
 	_skip.visible = sec == TL.SONG and _over_at == -1
 	queue_redraw()
+
+
+func _shown_points(now: int) -> int:
+	var k := clampf(float(now - _pts_at) / B.POINTS_ROLL_MS, 0.0, 1.0)
+	return roundi(lerpf(_pts_from, _pts_to, k))
 
 
 # 画面で見せる区間。一時停止から戻った直後の 1 小節は、返しではなく数えとして見せる(押しても判定しない小節なので)。
@@ -342,16 +366,16 @@ func _draw() -> void:
 	var f := Kit.font(700)
 	var tick: int = _snap["tick"]
 	var sec := _view_section()
-	# 上の帯: 残機(丸。失った物は線だけ。失った時は赤い輪が広がる)
+	# 上の帯: 暗い帯の上に置く(どんな背景の上でも読める。舞台の外まで)
+	draw_rect(Rect2(-2000, -2000, 5280, 2064), Color(Kit.C_FLOOR, 0.72))
+	draw_line(Vector2(-2000, 64), Vector2(3280, 64), Color(Kit.C_EDGE, 0.8), 2.0)
+	# 残機: ギターのピック(失った物は線だけ。失った時は赤い輪が広がる)
 	for k in B.LIVES:
 		var c := Vector2(300 + 34 * k, 32)
-		if k < int(_snap["lives"]):
-			draw_circle(c, 11, Kit.C_TEXT)
-		else:
-			draw_arc(c, 11, 0, TAU, 24, Kit.C_TEXT, 2.0, true)
+		Kit.draw_pick(self, c, 12.0, Kit.C_TEXT, k < int(_snap["lives"]))
 		if k == int(_snap["lives"]) and now - _life_lost_at < B.LIFE_LOST_MS:
 			var t := float(now - _life_lost_at) / B.LIFE_LOST_MS
-			draw_arc(c, 11 + 14 * t, 0, TAU, 32, Color(Kit.C_MISS, _flash(1.0 - t)), 3.0, true)
+			draw_arc(c, 12 + 14 * t, 0, TAU, 32, Color(Kit.C_MISS, _flash(1.0 - t)), 3.0, true)
 	# 層の札: 鳴っている層は塗る。合った後、次の小節の頭までは薄く塗って待つ。鳴り始めたら膨らむ。鳴っている札は拍で明るくなる
 	var beat_t := float(now - _beat_at) / B.BEAT_LIT_MS
 	for k in B.MAX_LAYERS:
@@ -359,15 +383,25 @@ func _draw() -> void:
 		var on := k < Music.layers
 		if on and k == Music.layers - 1 and now - _layer_on_at < B.TAG_POP_MS:
 			r = r.grow(B.TAG_POP_PX * (1.0 - float(now - _layer_on_at) / B.TAG_POP_MS))
-		var fill := Color(Kit.C_LAYER, 0.85) if on else (Color(Kit.C_LAYER, 0.3) if k < _layers else Color(1, 1, 1, 0.03))
-		draw_rect(r, fill)
+		var sb := Kit._shared_box()
+		sb.set_corner_radius_all(18)
+		sb.bg_color = Color(Kit.C_LAYER, 0.88) if on else (Color(Kit.C_LAYER, 0.3) if k < _layers else Color(Kit.C_FLOOR, 0.6))
+		sb.border_color = Kit.C_LAYER
+		sb.set_border_width_all(2)
+		draw_style_box(sb, r)
 		if on and beat_t < 1.0:
-			draw_rect(r, Color(1, 1, 1, _flash(0.22 * (1.0 - beat_t))))
-		draw_rect(r, Kit.C_LAYER, false, 2.0)
+			sb.bg_color = Color(1, 1, 1, _flash(0.22 * (1.0 - beat_t)))
+			sb.set_border_width_all(0)
+			draw_style_box(sb, r)
 		if k == _tag_layer and now - _tag_at < B.TAG_LIT_MS:
 			var a := _flash(1.0 - float(now - _tag_at) / B.TAG_LIT_MS)
-			draw_rect(r.grow(5), Color(Kit.C_LAYER, a), false, 4.0)
-		draw_string(f, Vector2(r.position.x, r.position.y + r.size.y / 2 + 8), S.LAYER_NAMES[k], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Kit.C_BG if on else Kit.C_LAYER)
+			sb.set_corner_radius_all(22)
+			sb.draw_center = false
+			sb.border_color = Color(Kit.C_LAYER, a)
+			sb.set_border_width_all(4)
+			draw_style_box(sb, r.grow(5))
+			sb.draw_center = true
+		draw_string(f, Vector2(r.position.x, r.position.y + r.size.y / 2 + 8), S.LAYER_NAMES[k], HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Kit.C_FLOOR if on else Kit.C_LAYER)
 	# 入った点(判定の後、点の下に浮かんで消える)
 	if now - _gain_at < B.GAIN_MS:
 		var t := float(now - _gain_at) / B.GAIN_MS
@@ -375,6 +409,8 @@ func _draw() -> void:
 	# 小節の目盛り: 8 つの位置(拍は大きい点)と、今の位置の縦線(お手本の間は黄、返しの間は青)
 	var y := B.RULER_Y
 	var step := (B.RULER_X1 - B.RULER_X0) / B.BAR_EIGHTHS
+	for k: int in [-2, -1, 1, 2]:  # 題字と同じ譜面の 5 本線(真ん中が目盛り)を薄く。v0.3.0
+		draw_line(Vector2(B.RULER_X0 - 40, y + k * 12), Vector2(B.RULER_X1 + 40, y + k * 12), Color(Kit.C_SPOT, 0.07), 2.0)
 	draw_line(Vector2(B.RULER_X0, y), Vector2(B.RULER_X1, y), Kit.C_RULER, 2.0)
 	var beat_lit := now - _beat_at < B.BEAT_LIT_MS
 	for i in B.BAR_EIGHTHS:

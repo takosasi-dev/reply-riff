@@ -61,6 +61,7 @@ const BOT_SEED := 0x2468
 const VOLUMES := [0, 25, 50, 75, 100]
 const DEFAULT_VOLUME := 75
 const SAMPLE_KEY := 3  # 音量を選んだ時に鳴らす音(ソ)
+const CONFIRM_KEY := 5  # ボタンを決めた時に薄く鳴らす音(高いド。v0.3.0)
 
 # 音(§9.9・§9.10)
 const LOOP_SEC := 9.6  # 伴奏のくり返し(4 小節)
@@ -89,6 +90,17 @@ const TAG_POP_PX := 6.0
 const LIFE_LOST_MS := 500  # 残機を失った丸から赤い輪が広がる
 const GAIN_MS := 900  # 判定で入った点が浮かんで消える
 const OLD_MARK_ALPHA := 0.5  # 次のお手本の間に残す、前の回の段の印の濃さ
+# UI の作り直しで足した動き(2026-11-21、v0.3.0。画面設計書 §10)
+const TRANS_OUT_MS := 120  # 画面の切り替わり: 前の画面を暗くする
+const TRANS_IN_MS := 220  # 新しい画面をスポットの輪で開く
+const TRANS_PLAY_OUT_MS := 80  # プレイに入る時は短く(もう1回を遅くしない)
+const TRANS_PLAY_IN_MS := 160
+const PAUSE_FADE_MS := 150
+const POINTS_ROLL_MS := 300  # 上の帯の点が数え上がる
+const POINTS_BUMP_MS := 240  # 点が増えた時に跳ねる
+const POINTS_BUMP := 0.22
+const TALLY_STEP_MS := 80  # 結果: 合った回のレコードを 1 枚ずつ置く間
+const CONFETTI_MS := 1800  # 結果: 新しい記録の紙吹雪
 
 # 画面の配置(画面設計書 §3)
 const RULER_X0 := 240.0

@@ -1,5 +1,6 @@
-# S3 結果(画面設計書 §4)。見出し・点(600 ms で数え上がる)・最高との差・5 つの数と残機(FR-16)・共有する文字を出す。
+# S3 結果(画面設計書 §4・§10)。見出し・点(600 ms で数え上がる)・最高との差・合った回(レコード 8 枚)・判定の 4 段と残機(FR-16)・共有する文字を出す。
 # もう1回は 300 ms 後から押せる(Enter・R でも)。コピーは clipboard_set を試し、選べる枠も出す(E-14)。作りは KeyFlak の ui/result.gd。
+# v0.3.0: 点が数え上がった後、合った回のレコードを 1 枚ずつ置く。新しい記録なら「自己最高」の判子と紙吹雪(点滅を弱めると紙吹雪は出さない)。
 extends Control
 
 signal retry
@@ -11,10 +12,18 @@ const Score := preload("res://core/score.gd")
 const Kit := preload("res://ui/kit.gd")
 const Menu := preload("res://ui/menu.gd")
 
+const TALLY_Y := 256.0
+const GRADE_Y := 304.0
+
 var menu: Menu
 var share := ""
+var celebrate := false  # 新しい記録(判子と紙吹雪。テストが読む)
 var _points := 0
+var _turns_ok := 0
+var _counts: Array = []
+var _lives := 0
 var _shown_at := 0
+var _badge_at := Vector2(1060, 122)
 var _points_label: Label
 var _retry: Button
 var _copied: Label
@@ -25,26 +34,45 @@ func build(mode: int, result: Dictionary, rec: Dictionary, share_text: String) -
 	size = Vector2(1280, 720)
 	share = share_text
 	_points = int(result["points"])
+	_turns_ok = int(result["turns_ok"])
+	_counts = result["counts"]
+	_lives = int(result["lives"])
+	celebrate = bool(rec["new_best"]) and _points > 0
 	_shown_at = Time.get_ticks_msec()
 	var head: String = S.RES_DONE % int(result["missed_turns"]) if result["finished"] else S.RES_STOP % int(result["reached"])
-	add_child(Kit.place(Kit.label(head, 32, Kit.C_TEXT, 700), 0, 20, 1280, 48))
-	_points_label = Kit.label(S.RES_POINTS % "0", 96, Kit.C_TEXT, 800)
-	add_child(Kit.place(_points_label, 0, 68, 1280, 120))
+	add_child(Kit.place(Kit.label(head, 30, Kit.C_TEXT, 700, 6), 0, 16, 1280, 48))
+	_points_label = Kit.big_label(S.RES_POINTS % "0", 100)
+	add_child(Kit.place(_points_label, 0, 60, 1280, 132))
 	if rec["prev_best"] != null:
 		var best := int(rec["prev_best"]["score"])
 		var text: String = S.RES_NEW_BEST % Score.comma(_points - best) if rec["new_best"] else S.RES_TO_BEST % Score.comma(best - _points)
 		if mode == 0:
 			text += S.RES_TODAY_BEST % Score.comma(maxi(best, _points))
-		add_child(Kit.place(Kit.label(text, 24, Kit.C_PERFECT if rec["new_best"] else Kit.C_DIM, 700), 0, 194, 1280, 36))
+		# 新しい記録は明るい生成り(緑は判定の「ぴったり」の色なので使わない。v0.3.0)
+		add_child(Kit.place(Kit.label(text, 22, Kit.C_TEXT if rec["new_best"] else Kit.C_DIM, 700, 4), 0, 194, 1280, 34))
+	var full := Kit.display().get_string_size(S.RES_POINTS % Score.comma(_points), HORIZONTAL_ALIGNMENT_LEFT, -1, 100).x
+	_badge_at = Vector2(minf(640 + full / 2 + 60, 1180), 96)  # 判子は点の字の右上に少し重ねる
+	var turns := Kit.label(S.RES_TURNS % _turns_ok, 24, Kit.C_TEXT, 700, 4)
+	turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	add_child(Kit.place(turns, 300, TALLY_Y - 20, 220, 40))
+	# 判定の 4 段と残機: 印(形で分ける)と数を、字の幅に合わせて真ん中に並べる
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 40)
-	row.add_child(Kit.label(S.RES_TURNS % int(result["turns_ok"]), 26, Kit.C_TEXT, 500))
-	for g in 4:
-		row.add_child(Kit.label(S.RES_GRADE % [S.GRADE_NAMES[g], int(result["counts"][g])], 26, Kit.C_TEXT, 500))
-	row.add_child(Kit.label(S.RES_LIVES % int(result["lives"]), 26, Kit.C_DIM, 500))  # FR-16(画面設計書 §4 の 5 つの数には無い)
-	add_child(Kit.place(row, 0, 240, 1280, 44))
-	_retry = Kit.place(Kit.button("retry", S.B_RETRY, 30), 490, 306, 300, 68)
+	row.add_theme_constant_override("separation", 10)
+	for g in 5:
+		if g > 0:
+			var gap := Control.new()
+			gap.custom_minimum_size = Vector2(26, 1)
+			row.add_child(gap)
+		var icon := Mark.new()
+		icon.grade = g
+		icon.filled = _lives > 0
+		icon.custom_minimum_size = Vector2(24, 36)
+		row.add_child(icon)
+		var text: String = S.RES_GRADE % [S.GRADE_NAMES[g], int(_counts[g])] if g < 4 else S.RES_LIVES % _lives
+		row.add_child(Kit.label(text, 22, Kit.C_TEXT if g < 4 else Kit.C_DIM, 500, 4))
+	add_child(Kit.place(row, 0, GRADE_Y - 18, 1280, 36))
+	_retry = Kit.place(Kit.button("retry", S.B_RETRY, 30), 490, 340, 300, 68)
 	_retry.disabled = true
 	add_child(_retry)
 	var box := TextEdit.new()
@@ -54,21 +82,39 @@ func build(mode: int, result: Dictionary, rec: Dictionary, share_text: String) -
 	box.context_menu_enabled = true
 	box.focus_mode = Control.FOCUS_CLICK
 	box.add_theme_font_override("font", Kit.font(400))
-	box.add_theme_font_size_override("font_size", 18)
-	box.add_theme_color_override("font_readonly_color", Kit.C_TEXT)
-	add_child(Kit.place(box, 290, 398, 700, 100))
-	var copy := Kit.place(Kit.button("copy", S.B_COPY, 24), 420, 514, 200, 56)
-	var title := Kit.place(Kit.button("title", S.B_TITLE, 24), 660, 514, 200, 56)
+	box.add_theme_font_size_override("font_size", 17)
+	add_child(Kit.place(box, 290, 426, 700, 118))
+	# 右クリックのメニューは、読むだけの枠で使う 2 つに絞って日本語にする(既定は英語の項目が並ぶ。v0.3.0)
+	var cm := box.get_menu()
+	cm.clear()
+	cm.add_item(S.B_COPY, TextEdit.MENU_COPY)
+	cm.add_item(S.MENU_SELECT_ALL, TextEdit.MENU_SELECT_ALL)
+	var copy := Kit.place(Kit.button("copy", S.B_COPY, 24), 395, 558, 230, 56)
+	var title := Kit.place(Kit.button("title", S.B_TITLE, 24), 655, 558, 230, 56)
 	add_child(copy)
 	add_child(title)
 	_copied = Kit.label("", 18, Kit.C_DIM)
-	add_child(Kit.place(_copied, 0, 578, 1280, 28))
+	add_child(Kit.place(_copied, 0, 622, 1280, 28))
 	if not rec.get("saved", true):
-		add_child(Kit.place(Kit.label(S.SAVE_FAILED, 20, Kit.C_WARN), 0, 630, 1280, 40))
+		add_child(Kit.place(Kit.label(S.SAVE_FAILED, 20, Kit.C_WARN), 0, 654, 1280, 36))
 	_retry.pressed.connect(func() -> void: retry.emit())
 	copy.pressed.connect(_copy)
 	title.pressed.connect(func() -> void: to_title.emit())
 	menu = Menu.new([_retry, copy, title] as Array[Button], 0)
+
+
+
+# 判定の印(0〜3)か残機のピック(4)を 1 つ描く。
+class Mark extends Control:
+	const Kit := preload("res://ui/kit.gd")
+	var grade := 0
+	var filled := true
+
+	func _draw() -> void:
+		if grade < 4:
+			Kit.draw_grade(self, size / 2, grade, 10.0)
+		else:
+			Kit.draw_pick(self, size / 2, 10.0, Kit.C_DIM, filled)
 
 
 func _copy() -> void:
@@ -83,6 +129,56 @@ func _process(_delta: float) -> void:
 	_points_label.text = S.RES_POINTS % Score.comma(shown)
 	if _retry.disabled and t >= B.RETRY_LOCK_MS:
 		_retry.disabled = false
+	if t < _stamp_at() + B.CONFETTI_MS + 100:
+		queue_redraw()
+
+
+# 判子を押す時刻(画面に入ってから。点の数え上げと、レコードを置き終えた後)。
+func _stamp_at() -> int:
+	return B.COUNT_MS + B.TURNS * B.TALLY_STEP_MS
+
+
+func _draw() -> void:
+	var t := Time.get_ticks_msec() - _shown_at
+	if Kit.calm:
+		t = 100000  # 動きを減らす: 置き終えた形だけ
+	# 合った回: 8 つの丸(プレイの「回の進み」と同じ形と色。合った数だけ緑で塗る)。点の数え上げの後に 1 つずつ跳ねて塗る
+	for i in B.TURNS:
+		var c := Vector2(556 + i * 46, TALLY_Y)
+		var k := clampf(float(t - B.COUNT_MS - i * B.TALLY_STEP_MS) / B.TALLY_STEP_MS, 0.0, 1.0)
+		draw_arc(c, 14, 0, TAU, 32, Kit.C_EDGE, 2.0, true)
+		if i < _turns_ok and k > 0.0:
+			draw_circle(c, 14.0 * (1.0 + 0.45 * (1.0 - k)), Color(Kit.C_PERFECT, k))
+	if not celebrate:
+		return
+	# 紙吹雪(音符の頭とピック。決まった並び)
+	var e := t - _stamp_at()
+	if e >= 0 and e < B.CONFETTI_MS:
+		var k := float(e) / B.CONFETTI_MS
+		for i in 44:
+			var h := fmod(i * 0.61803398, 1.0)
+			var x := 140.0 + fmod(i * 233.7, 1000.0) + sin(k * 6.0 + i) * 30.0
+			var y := -30.0 + k * (420.0 + 360.0 * h) + h * 120.0
+			var col: Color = [Kit.C_CRIMSON, Kit.C_TEXT, Color("E0566B")][i % 3]
+			col = Color(col, 1.0 - k * k)
+			if i % 2 == 0:
+				Kit.draw_pick(self, Vector2(x, y), 7.0, col)
+			else:
+				draw_circle(Vector2(x, y), 5.0, col)
+	# 判子「自己最高」(点の右。押された時に大きい所から縮む)
+	if t >= _stamp_at():
+		var k := clampf(float(t - _stamp_at()) / 200.0, 0.0, 1.0)
+		var sc := 1.0 + 0.6 * (1.0 - k)
+		draw_set_transform(_badge_at, -0.2, Vector2(sc, sc))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(Kit.C_CRIMSON, 0.9 * k)
+		sb.border_color = Color(Kit.C_TEXT, k)
+		sb.set_border_width_all(3)
+		sb.set_corner_radius_all(8)
+		sb.anti_aliasing = true
+		draw_style_box(sb, Rect2(-80, -28, 160, 56))
+		draw_string(Kit.font(800), Vector2(-80, 10), S.RES_BADGE, HORIZONTAL_ALIGNMENT_CENTER, 160, 28, Color(Kit.C_TEXT, k))
+		draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
 func key(ev: InputEventKey) -> void:

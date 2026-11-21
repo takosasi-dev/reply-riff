@@ -278,7 +278,7 @@ try {
 	await shot('keys');
 	if (process.argv.includes('--docs')) {
 		mkdirSync(path.join(ROOT, 'docs'), { recursive: true });
-		for (const [f, to] of [['s2_miss_reduced', 'play_reply'], ['s2_song', 'play_song'], ['s3_result', 'result']]) copyFileSync(path.join(OUT, f + '.png'), path.join(ROOT, 'docs', to + '.png'));
+		for (const [f, to] of [['s1_title_record', 'title'], ['s2_turn4_ok', 'play'], ['s3_result_newbest', 'result']]) copyFileSync(path.join(OUT, f + '.png'), path.join(ROOT, 'docs', to + '.png'));
 	}
 } catch (e) {
 	expect(false, `途中で止まった: ${e.stack ?? e}`);

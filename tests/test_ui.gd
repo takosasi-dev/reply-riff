@@ -5,6 +5,7 @@ extends "res://tests/suite.gd"
 const MainScene := preload("res://ui/main.tscn")
 const Store := preload("res://save/save_store.gd")
 const Play := preload("res://ui/play.gd")
+const Kit := preload("res://ui/kit.gd")
 
 
 static func kev(pk: int, pressed: bool = true, echo: bool = false) -> InputEventKey:
@@ -407,5 +408,87 @@ func test_resume_lead_in_and_reduced_flash() -> bool:
 	eq(p._view_section(), TL.CALL, "お手本に入ったら元に戻る")
 	p.reduce_flash = true
 	ok(p._flash(1.0) <= B.REDUCED_FLASH_ALPHA and p._flash(0.1) <= 0.1, "点滅を弱めると光は 20% 以下")
+	_done(m)
+	return true
+
+
+# v0.3.0: 画面の切り替わりは見た目だけ。画面と入力はすぐ次へ行き、前の画面は動かず押せないまま幕が暗くなり切るまで残る。
+func test_transition_is_visual_only() -> bool:
+	var m := _main()
+	press(m, KEY_X)
+	eq(m.screen, "title", "キーですぐタイトル")
+	ok(m.curtain.active(), "幕が動いている")
+	eq(m._pending, m.current, "新しい画面は幕が暗くなり切るまで透明")
+	eq(m.current.modulate.a, 0.0, "透明")
+	eq(m._ghosts.size(), 1, "前の画面(S0)が残る")
+	eq(m._ghosts[0].process_mode, Node.PROCESS_MODE_DISABLED, "前の画面は動かない")
+	press(m, KEY_ENTER)
+	var first: Node = m.play
+	press(m, KEY_ENTER)
+	press(m, KEY_ENTER)
+	eq(m.screen, "play", "動いている間の Enter でも今日の曲に入る")
+	ok(m.play == first, "連打しても 2 回始まらない")
+	eq(m._ghosts.size(), 1, "前の画面は最後の 1 つだけ(古い物はすぐ消す)")
+	m.curtain._at -= 1000  # 幕が暗くなり切った後
+	m._process(0.0)
+	eq(m._ghosts.size(), 0, "暗くなり切ったら前の画面を消す")
+	eq(m.play.modulate.a, 1.0, "新しい画面を見せる")
+	ok(m.curtain._out == B.TRANS_PLAY_OUT_MS and m.curtain._in == B.TRANS_PLAY_IN_MS, "プレイに入る時は短い動き")
+	_done(m)
+	return true
+
+
+# v0.3.0: 点滅を弱めると動きも減らす(切り替わりは 150 ms のフェードだけ・数え上げで跳ねない)。
+func test_reduce_flash_calms_motion() -> bool:
+	var m := _main()
+	ok(not Kit.calm, "既定は動く")
+	m.store.set_setting("reduce_flash", true)
+	m._apply_settings()
+	ok(Kit.calm, "点滅を弱める → 動きを減らす")
+	press(m, KEY_X)
+	eq(m.curtain._out, 0, "前の画面を暗くする間は無し")
+	eq(m.curtain._in, Kit.Curtain.CALM_MS, "150 ms のフェード")
+	press(m, KEY_ENTER)
+	m.play.sim.points = 500
+	m.play._refresh()
+	eq(m.play._bar["points"].scale, Vector2.ONE, "点が増えても跳ねない")
+	_done(m)
+	Kit.calm = false
+	return true
+
+
+# v0.3.0: 上の帯の点は数え上がって跳ねる。
+func test_points_roll_and_bump() -> bool:
+	var m := _main()
+	_to_play(m)
+	var p: Play = m.play
+	p.sim.points = 1000
+	p._refresh()
+	ok(p._bar["points"].scale.x > 1.1, "増えた瞬間に跳ねる(%s)" % p._bar["points"].scale)
+	eq(p._bar["points"].text, "0点", "数え上げの始め")
+	p._pts_at -= 1000
+	p._refresh()
+	eq(p._bar["points"].text, "1,000点", "数え上げの終わり")
+	eq(p._bar["points"].scale, Vector2.ONE, "跳ね終わる")
+	_done(m)
+	return true
+
+
+# v0.3.0: 新しい記録の時だけ祝う(判子と紙吹雪)。同じ点・0 点では祝わない。
+func test_result_celebrates_new_best() -> bool:
+	var m := _main()
+	_to_play(m)
+	var bot := Bots.new(Bots.EXACT)
+	while not m.play.sim.is_over():
+		bot.act(m.play.sim)
+		m.play.sim.step()
+	m.play.finished.emit(m.play.sim.result())
+	ok(m.current.celebrate, "初めての点は新しい記録")
+	m.current._shown_at -= 1000
+	frames(m, 1)
+	press(m, KEY_ENTER)  # もう1回(同じ曲)
+	_finish(m)  # 何も押さない
+	ok(not m.current.celebrate, "0 点は祝わない")
+	eq(m.current.menu.sel, 0, "もう1回に最初から合わせてある")
 	_done(m)
 	return true

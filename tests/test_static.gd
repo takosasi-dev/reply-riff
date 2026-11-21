@@ -58,6 +58,55 @@ func test_font_has_all_chars() -> bool:
 	eq(missing, "", "字体に無い文字")
 	for c in "0123456789,+−×":
 		ok(f.has_char(c.unicode_at(0)), "数字と記号 %s" % c)
+	# v0.3.0: 題字の字体(Shrikhand)は題字と数字の字。日本語は Noto に落ちる(豆腐を出さない)
+	var d := load(Kit.DISPLAY) as Font
+	ok(d != null, "題字の字体を読める")
+	for c in "ReplyRif0123456789,+":
+		ok(d != null and d.has_char(c.unicode_at(0)), "題字の字体に %s" % c)
+	var dv := Kit.display()
+	ok(dv.fallbacks.size() == 1 and (dv.fallbacks[0] as Font).has_char("点".unicode_at(0)), "題字の字体の「点」は Noto に落ちる")
+	return true
+
+
+# v0.3.0: 全部の Control が通る Theme が project に付いていて、ボタンの 5 つの状態と選んだ印・枠・スクロールバー・メニューがある。
+func test_project_theme() -> bool:
+	eq(ProjectSettings.get_setting("gui/theme/custom"), "res://ui/theme.tres", "project の gui/theme/custom")
+	var t := load("res://ui/theme.tres") as Theme
+	ok(t != null, "Theme を読める")
+	if t == null:
+		return true
+	for st: String in ["normal", "hover", "focus", "pressed", "disabled"]:
+		ok(t.has_stylebox(st, "Button"), "Button の %s" % st)
+	ok(t.get_type_variation_base("SelButton") == &"Button" and t.has_stylebox("normal", "SelButton"), "選んでいるボタン")
+	ok(t.has_stylebox("read_only", "TextEdit") and t.has_stylebox("grabber", "VScrollBar") and t.has_stylebox("panel", "PopupMenu"), "共有の枠・スクロールバー・右クリックのメニュー")
+	ok(t.has_stylebox("slider", "HSlider") and t.has_icon("checked", "CheckBox") and t.has_stylebox("normal", "LineEdit"), "スライダー・チェック・入力欄")
+	ok(ThemeDB.get_project_theme() != null, "動いている間の project の Theme")
+	return true
+
+
+static func _lum(c: Color) -> float:
+	var ch := [c.r, c.g, c.b]
+	for i in 3:
+		ch[i] = ch[i] / 12.92 if ch[i] <= 0.03928 else pow((ch[i] + 0.055) / 1.055, 2.4)
+	return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+
+
+static func _ratio(a: Color, b: Color) -> float:
+	var la := _lum(a)
+	var lb := _lum(b)
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
+
+
+# v0.3.0: 字と地のコントラスト(4.5:1 以上。大きな字は 3:1 以上)。地は壁・板・選んだ板・帯、字は生成り・弱い字・意味の色。
+func test_palette_contrast() -> bool:
+	var sel_fill := Color("4A2633")
+	for pair: Array in [[Kit.C_TEXT, Kit.C_BG], [Kit.C_TEXT, Kit.C_BG2], [Kit.C_TEXT, Kit.C_PANEL], [Kit.C_TEXT, sel_fill], [Kit.C_TEXT, Kit.C_KEY_FILL],
+			[Kit.C_DIM, Kit.C_BG], [Kit.C_DIM, Kit.C_BG2], [Kit.C_CALL, Kit.C_BG2], [Kit.C_PRESS, Kit.C_BG2], [Kit.C_PERFECT, Kit.C_BG2],
+			[Kit.C_MISS, Kit.C_BG2], [Kit.C_WARN, Kit.C_BG2], [Kit.C_LAYER, Kit.C_FLOOR], [Kit.C_FLOOR, Kit.C_LAYER], [Kit.C_FLOOR, Kit.C_PRESS]]:
+		var r := _ratio(pair[0], pair[1])
+		ok(r >= 4.5, "%s の上の %s: %.2f" % [pair[1].to_html(false), pair[0].to_html(false), r])
+	var big := _ratio(Kit.C_CRIMSON, Kit.C_BG)
+	ok(big >= 3.0, "題字の Riff(大きな字): %.2f" % big)
 	return true
 
 

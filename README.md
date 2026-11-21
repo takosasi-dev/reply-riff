@@ -6,9 +6,11 @@
 
 > **試作です。** 押してから音が出るまでの遅れを、まだ本物のブラウザで測っていません。測って遅ければ(Chrome で 80 ms を超えれば)、公開をやめることがあります。
 
-| 弾き返した後(◇ がお手本、青い丸が押した位置) | 自分の曲 | 結果 |
+| タイトル | 弾き返した後(◇ がお手本、青い丸が押した位置) | 結果(自己最高) |
 |---|---|---|
-| ![返しの判定](docs/play_reply.png) | ![自分の曲](docs/play_song.png) | ![結果](docs/result.png) |
+| ![タイトル](docs/title.png) | ![プレイ](docs/play.png) | ![結果](docs/result.png) |
+
+見た目は「小さなライブハウス」です。暖かい壁と両端の深紅の幕、上からのスポット、レコードと譜面の題字。黄はお手本、青は自分の音で、判定は印の形(● ◐ ○ ×)でも分けています。
 
 ## 遊び方
 
@@ -75,6 +77,13 @@ python tools/gd.py smoke 300000 --auto
 
 # Web 書き出しを窓なし・消音の Chrome で一通り確かめ、画面を build/web_shots/ に撮る(Node.js 22 以降)
 node tests/web/check.mjs
+# 全部の画面を 5 つの大きさ(1280×720・1920×1080・1024×768・2560×1080・390×844)で撮る
+node tests/web/shots.mjs after
+# プレイ中のフレームの間と伴奏の時計のずれ(60 秒)。前の版の書き出しのフォルダを渡すと比べられる
+node tests/web/fps.mjs build/web
+
+# ボタン・枠の見た目(ui/theme.tres)を作り直す
+python tools/gd.py run res://tools/make_theme.gd
 
 # 音を作る・字体を画面の文字に絞る(Python)
 python tools/gen_audio.py
@@ -86,7 +95,9 @@ python tools/subset_font.py
 
 ## 開発状況
 
-v0.2.0。人が遊ぶ確かめは、まだしていません。
+v0.3.0(画面の見た目を作り直した版)。人が遊ぶ確かめは、まだしていません。
+
+- 画面は窓なし Chrome で 5 つの大きさ(1280×720・1920×1080・1024×768・2560×1080、スマホ幅 390×844 は記録だけ)で撮って確かめました。本物の画面・GPU での重さは未確認です。
 
 - 窓なしの Chrome(音は消したまま)で、起動から S0 → タイトル → 設定 → 今日の曲 → 一時停止 → 結果 → もう1回 → 練習を、本物のキーのイベント(CDP)で一通り確かめました(`node tests/web/check.mjs`)。コンソールのエラー 0 件、読み込みの後の通信 0 件。
 - 伴奏の時計(曲の位置)とブラウザの音の時計(AudioContext)の差は、60 秒で 20 ms 未満しか動きませんでした(窓なし Chrome の値)。4 層どうしのずれは、1 つのプレイヤーで同じ長さ・同じくり返しで鳴らす作りでそろうはずですが、録音では確かめていません。
@@ -95,4 +106,4 @@ v0.2.0。人が遊ぶ確かめは、まだしていません。
 
 ## ライセンス
 
-MIT(`LICENSE`)。同梱の字体は SIL Open Font License 1.1 です(`THIRD-PARTY-NOTICES.md`)。
+MIT(`LICENSE`)。同梱の字体 2 つ(画面の字の Noto Sans JP、題字と数字の Shrikhand)は SIL Open Font License 1.1 です(`THIRD-PARTY-NOTICES.md`、原文は `assets/fonts/OFL_*.txt`)。どちらも使う字だけに絞って同梱しています。
